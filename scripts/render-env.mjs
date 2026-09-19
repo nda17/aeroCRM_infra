@@ -143,10 +143,10 @@ for (const [service, role, port, explicit] of roles) {
   }
   if (service === 'crm-access') {
     env.CRM_ACCESS_BILLING_ENABLED = q('CRM_ACCESS_BILLING_ENABLED');
-    if (!isPublisher) Object.assign(env, identityClient('CRM_ACCESS'), base('BILLING'), base('CRM_SALES'), tokens([
+    // The Access module constructs its service clients in every process role.
+    Object.assign(env, identityClient('CRM_ACCESS'), base('BILLING'), base('CRM_SALES'), tokens([
       'BILLING_CRM_ACCESS_TOKEN', 'BILLING_CRM_ACCESS_COMMERCE_TOKEN', 'CRM_ACCESS_CRM_CUSTOMERS_TOKEN',
       'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_ACCESS_CRM_INTAKE_TOKEN', 'CRM_ACCESS_SUPPORT_TOKEN', 'CRM_SALES_CRM_ACCESS_TOKEN']));
-    if (isPublisher) Object.assign(env, tokens(['CRM_ACCESS_CRM_CUSTOMERS_TOKEN', 'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_ACCESS_CRM_INTAKE_TOKEN']));
     if (!isApi) env.CRM_ACCESS_RABBITMQ_ASSERT_TOPOLOGY = 'false';
   }
   if (service === 'crm-intake') {
