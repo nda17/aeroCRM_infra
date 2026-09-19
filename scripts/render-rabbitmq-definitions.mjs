@@ -342,8 +342,11 @@ function regex(names) {
   return `^${emit(root)}$`;
 }
 const mainQueues = prefix => [...queues.keys()].filter(name => name.startsWith(prefix) && !name.includes('.retry') && !name.endsWith('.dead-letter'));
+const enabledNotificationKinds = new Set(parseEnv(fs.readFileSync(path.join(root, '.deploy/env/backend/notification-delivery-worker.env'), 'utf8')).NOTIFICATION_DELIVERY_KINDS.split(','));
+const notificationReadQueues = notifications.filter(([kind]) => enabledNotificationKinds.has(kind))
+  .flatMap(([, name]) => [name, `${name}.dead-letter`]);
 const permissionsByRuntime = {
-  'notification-delivery-worker': { read: mainQueues('aerocrm.notification.').filter(name => name !== identityQueue), write: [events, retry, dead] },
+  'notification-delivery-worker': { read: notificationReadQueues, write: [events, retry, dead] },
   'campaigns-service': { read: mainQueues('aerocrm.campaigns.'), write: [events, campaignsRetry, dead] },
   'reporting-service': { read: mainQueues('aerocrm.reporting.'), write: [events, reportingRetry, reportingManual, dead] },
   'billing-worker': { read: mainQueues('aerocrm.billing.'), write: [] },
@@ -370,8 +373,11 @@ assert.deepEqual(Object.keys(permissionsByRuntime).sort(), runtimes.toSorted());
 // the inventory check below proves this still grants only the exact resources.
 const operationsReadPattern =
   '^aerocrm\\.(?:operations\\.(?:admin\\.audit\\.(?:campaigns|reporting|billing|identity|platform|support)\\.v1(?:\\.retry-v1|\\.dead-letter)?|scheduled-jobs\\.v1(?:\\.retry-v1|\\.dead-letter)?)|events|retry|dead-letter|manual-retry)$';
+// Erlang/PCRE subroutine (?4) reuses (email|telegram), keeping the exact ACL under 256 bytes.
 const notificationReadPattern =
-  '^aerocrm\\.notification\\.((support\\.team|wincrm\\.(intake-sla|task-reminder)|subscription-expiry)\\.(email|telegram)|support\\.client\\.email|wincrm\\.invitation\\.email|campaign\\.(email|telegram)\\.v2|(daily-summary|operations\\.backup-report)\\.telegram)$';
+  '^aerocrm\\.notification\\.((support\\.team|wincrm\\.(intake-sla|task-reminder))\\.(email|telegram)|(support\\.client|wincrm\\.invitation)\\.email|campaign\\.(?4)\\.v2|(daily-summary|operations\\.backup-report|subscription-expiry)\\.telegram)(\\.dead-letter)?$';
+// JavaScript lacks PCRE subroutines; expand this fixed, non-recursive group for inventory checks.
+const permissionPattern = expression => new RegExp(expression.replaceAll('(?4)', '(email|telegram)'));
 const permissions = runtimes.map(runtime => {
   const grants = permissionsByRuntime[runtime];
   for (const name of grants.read) assert(queues.has(name), `Unknown read queue: ${name}`);
@@ -391,7 +397,7 @@ for (const [i, runtime] of runtimes.entries()) {
     const expression = permissions[i][mode];
     if (Buffer.byteLength(expression, 'utf8') > 256)
       throw new Error(`Broker ${mode} permission pattern too long: ${runtime}`);
-    const pattern = new RegExp(expression);
+    const pattern = permissionPattern(expression);
     for (const name of inventory)
       if (pattern.test(name) !== expected.has(name))
         throw new Error(`Broker ${mode} permission mismatch: ${runtime}`);
@@ -407,7 +413,7 @@ for (const permission of permissions)
   for (const mode of ['configure', 'write', 'read']) {
     if (Buffer.byteLength(permission[mode], 'utf8') > 256)
       throw new Error(`Broker ${mode} permission pattern too long: ${permission.user}`);
-    new RegExp(permission[mode]);
+    permissionPattern(permission[mode]);
   }
 
 // Exact topology checks catch copy/paste omissions before any private file is emitted.
