@@ -1,0 +1,348 @@
+name: aerocrm-backend
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/postgres.env
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/rabbitmq.env
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    environment:
+      RABBITMQ_NODE_IP_ADDRESS: 127.0.0.1
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  api-gateway:
+    image: aerocrm/api-gateway:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/api-gateway.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  notification-delivery-worker:
+    image: aerocrm/notification-delivery:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/notification-delivery-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  campaigns-service:
+    image: aerocrm/campaigns:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/campaigns-service.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  reporting-service:
+    image: aerocrm/reporting:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/reporting-service.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  billing-api:
+    image: aerocrm/billing:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/billing-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  billing-scheduler:
+    image: aerocrm/billing:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/billing-scheduler.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  billing-worker:
+    image: aerocrm/billing:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/billing-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  billing-outbox-publisher:
+    image: aerocrm/billing:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/billing-outbox-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  identity-api:
+    image: aerocrm/identity:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/identity-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  identity-worker:
+    image: aerocrm/identity:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/identity-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  identity-outbox-publisher:
+    image: aerocrm/identity:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/identity-outbox-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  platform-api:
+    image: aerocrm/platform:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/platform-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  platform-outbox-publisher:
+    image: aerocrm/platform:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/platform-outbox-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  support-api:
+    image: aerocrm/support:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/support-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  support-worker:
+    image: aerocrm/support:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/support-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  support-outbox-publisher:
+    image: aerocrm/support:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/support-outbox-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  operations-api:
+    image: aerocrm/operations:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/operations-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  operations-worker:
+    image: aerocrm/operations:${IMAGE_SHA:?exact release SHA required}
+    user: "0:0"
+    volumes:
+      - ../secrets/database-backup-provenance-private-key.pem:/run/secrets/database-backup-provenance-private-key-source:ro
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/operations-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  operations-outbox-publisher:
+    image: aerocrm/operations:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/operations-outbox-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  operations-restore-worker:
+    image: aerocrm/operations:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/operations-restore-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+    profiles: ["restore"]
+  crm-access-api:
+    image: aerocrm/crm-access:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-access-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-access-worker:
+    image: aerocrm/crm-access:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-access-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-access-outbox-publisher:
+    image: aerocrm/crm-access:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-access-outbox-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-intake-api:
+    image: aerocrm/crm-intake:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-intake-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-intake-worker:
+    image: aerocrm/crm-intake:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-intake-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-intake-publisher:
+    image: aerocrm/crm-intake:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-intake-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-intake-sla-worker:
+    image: aerocrm/crm-intake:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-intake-sla-worker.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-intake-sla-publisher:
+    image: aerocrm/crm-intake:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-intake-sla-publisher.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-customers-api:
+    image: aerocrm/crm-customers:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-customers-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-sales-api:
+    image: aerocrm/crm-sales:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-sales-api.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-sales-reminders:
+    image: aerocrm/crm-sales:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-sales-reminders.env
+    environment:
+      APP_REVISION: ${IMAGE_SHA}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+    command: ["node", "dist/src/main-reminders.js"]
+volumes:
+  postgres_data:
+  rabbitmq_data:

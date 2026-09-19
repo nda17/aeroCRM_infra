@@ -1,0 +1,38 @@
+name: aerocrm-frontend
+services:
+  landing:
+    image: aerocrm/landing:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/frontend/landing.env
+    environment:
+      PORT: "3100"
+      HOSTNAME: 127.0.0.1
+      NODE_ENV: production
+      APP_REVISION: ${IMAGE_SHA}
+    security_opt:
+      - no-new-privileges:true
+  crm:
+    image: aerocrm/crm:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/frontend/crm.env
+    environment:
+      PORT: "3200"
+      HOSTNAME: 127.0.0.1
+      NODE_ENV: production
+      APP_REVISION: ${IMAGE_SHA}
+    security_opt:
+      - no-new-privileges:true
+  admin-panel:
+    image: aerocrm/admin-panel:${IMAGE_SHA:?exact release SHA required}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/frontend/admin-panel.env
+    environment:
+      PORT: "3300"
+      HOSTNAME: 127.0.0.1
+      NODE_ENV: production
+      APP_REVISION: ${IMAGE_SHA}
+    security_opt:
+      - no-new-privileges:true
