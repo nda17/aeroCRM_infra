@@ -39,12 +39,12 @@ trap rollback ERR
 docker compose -f "compose/$role.yml" up -d --remove-orphans
 if [[ "$role" == frontend ]]; then
   for port in 3100 3200 3300; do
-    curl --fail --silent --show-error --retry 12 --retry-delay 2 "http://127.0.0.1:$port/__frontend/health" >/dev/null
+    curl --fail --silent --show-error --retry 12 --retry-delay 2 --retry-connrefused --connect-timeout 2 --max-time 5 --retry-max-time 45 "http://127.0.0.1:$port/__frontend/health" >/dev/null
   done
 else
   ports=(4100 4401 4500 4600 4800 4801 4802 4803 4900 4901 4902 5000 5001 5100 5101 5102 5200 5201 5202 5300 5301 5302 5310 5311 5312 5317 5318 5320 5330 5331)
   for port in "${ports[@]}"; do
-    curl --fail --silent --show-error --retry 20 --retry-delay 3 "http://127.0.0.1:$port/health/ready" >/dev/null
+    curl --fail --silent --show-error --retry 20 --retry-delay 3 --retry-connrefused --connect-timeout 2 --max-time 5 --retry-max-time 90 "http://127.0.0.1:$port/health/ready" >/dev/null
   done
 fi
 mkdir -p releases
