@@ -11,12 +11,12 @@ const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const envPath = path.join(workspace, '.env');
 const env = parseEnv(fs.readFileSync(envPath, 'utf8'));
 const [target, scriptPath, option] = process.argv.slice(2);
-if (!['frontend', 'backend'].includes(target) || !scriptPath) {
-  throw new Error('Usage: node scripts/ssh.mjs frontend|backend script.sh [--bootstrap]');
+if (!['frontend', 'backend', 'telegram-relay'].includes(target) || !scriptPath) {
+  throw new Error('Usage: node scripts/ssh.mjs frontend|backend|telegram-relay script.sh [--bootstrap]');
 }
-const prefix = `CRM_${target.toUpperCase()}_`;
+const prefix = target === 'telegram-relay' ? 'CRM_TELEGRAM_RELAY_' : `CRM_${target.toUpperCase()}_`;
 const privateDir = path.join(workspace, '.deploy');
-const knownHosts = path.join(privateDir, 'known_hosts');
+const knownHosts = env[`${prefix}SSH_KNOWN_HOSTS_FILE`] || path.join(privateDir, 'known_hosts');
 const host = env[`${prefix}VPS_HOST`];
 const port = env[`${prefix}SSH_PORT`] || '22';
 if (!host || !/^\d+$/.test(port) || !fs.existsSync(knownHosts)) {
