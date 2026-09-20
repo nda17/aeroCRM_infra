@@ -5,9 +5,18 @@ set -euo pipefail
 role=${1:?frontend or backend required}
 sha=${2:?exact commit SHA required}
 expected_env_hash=${3:?env hash required}
+billing_capacity_migration=${4:-false}
+billing_migration_env_hash=${5:-}
+[[ $# -le 5 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
+[[ "$billing_capacity_migration" == true || "$billing_capacity_migration" == false ]] || exit 64
+if [[ "$billing_capacity_migration" == true ]]; then
+  [[ "$role" == backend && "$billing_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
+else
+  [[ -z "$billing_migration_env_hash" ]] || exit 64
+fi
 cd /opt/aerocrm
 exec 9>release.lock
 flock -n 9 || { echo 'Another aeroCRM release is active' >&2; exit 1; }
@@ -29,6 +38,12 @@ for app in "${apps[@]}"; do
   revision=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "aerocrm/$app:$sha")
   [[ "$revision" == "$sha" ]] || { echo "Image revision mismatch: $app" >&2; exit 1; }
 done
+if [[ "$billing_capacity_migration" == true ]]; then
+  node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
+  [[ -x "$node_bin" ]] || { echo 'Pinned Billing migration Node is unavailable' >&2; exit 1; }
+  "$node_bin" --check scripts/billing-capacity-migration.mjs
+  "$node_bin" scripts/billing-capacity-migration.mjs "$sha" "$billing_migration_env_hash"
+fi
 previous=$(cat "releases/$role.sha" 2>/dev/null || true)
 export IMAGE_SHA="$sha"
 rollback() {

@@ -41,6 +41,23 @@ and resume the same reviewed SHA/config using `crm_contracts_cutover_resume=true
 Do not perform an image-only rollback across this contract migration. After successful
 cutover, ordinary releases use `scripts/release.sh` again.
 
+## Billing capacity FK migration
+
+The additive Billing migration `20260921010000_defer_crm_capacity_bindings` makes two
+capacity foreign keys deferred within an existing checkout transaction. For its first
+backend release only, set `target=backend`, `billing_capacity_migration=true`, and
+`billing_migration_env_hash` to the SHA-256 of the private fixed VPS file
+`/opt/aerocrm/env/migrations/billing.env`. The file must be regular, non-symlinked,
+mode 0600, and contain only `NODE_ENV=production` and a loopback
+`BILLING_DATABASE_URL` for the `aerocrm_billing_migration` role, `aerocrm_billing`
+database and `billing` schema. The workflow verifies a pinned local Node runtime before
+image transfer. Under the ordinary release lock, `scripts/release.sh` checks exact images
+and active env, then runs `scripts/billing-capacity-migration.mjs` before switching images.
+The helper verifies the image migration inventory, existing migration history and both
+foreign keys before and after Prisma deploy. A failure before image switching leaves the
+previous runtime running; successful additive DDL remains on a later image rollback.
+Subsequent releases leave `billing_capacity_migration=false` and the hash empty.
+
 ## Android artifact
 
 Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.

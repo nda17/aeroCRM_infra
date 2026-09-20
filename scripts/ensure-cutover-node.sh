@@ -8,6 +8,12 @@ expected_sha256=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
 tools_dir=/opt/aerocrm/tools
 install_dir="$tools_dir/node-${version}-linux-x64"
 node_bin="$install_dir/bin/node"
+case "${1:-}" in
+  '') checked_scripts=(crm-contract-cutover.mjs crm-contract-cutover-preflight.mjs) ;;
+  --billing) checked_scripts=(billing-capacity-migration.mjs) ;;
+  *) echo 'Unknown Node verification mode' >&2; exit 64 ;;
+esac
+[[ $# -le 1 ]] || { echo 'Too many Node verification arguments' >&2; exit 64; }
 
 fail() {
   printf '%s\n' "$1" >&2
@@ -29,8 +35,9 @@ verify_runtime() {
     if (parseEnv('AEROCRM_CUTOVER_NODE_OK=1').AEROCRM_CUTOVER_NODE_OK !== '1' ||
         typeof fetch !== 'function' || typeof AbortSignal.timeout !== 'function') process.exit(1)
   })" || fail 'Cutover Node runtime smoke failed'
-  "$candidate" --check /opt/aerocrm/scripts/crm-contract-cutover.mjs
-  "$candidate" --check /opt/aerocrm/scripts/crm-contract-cutover-preflight.mjs
+  for checked_script in "${checked_scripts[@]}"; do
+    "$candidate" --check "/opt/aerocrm/scripts/$checked_script"
+  done
 }
 
 if [[ -e "$install_dir" || -L "$install_dir" ]]; then
