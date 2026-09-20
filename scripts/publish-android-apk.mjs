@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { execFileSync } from 'node:child_process';
 
+if (process.argv.includes('--help')) {
+  console.log('Usage: node scripts/publish-android-apk.mjs\nPublishes the verified root aeroCRM.apk and updates Android release metadata.');
+  process.exit(0);
+}
+assert.equal(process.argv.length, 2, 'Unexpected publication arguments');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const android = path.join(root, 'aeroCRM_monorepo/aeroCRM_android');
 const manifest = JSON.parse(fs.readFileSync(path.join(android, 'twa-manifest.json'), 'utf8'));
