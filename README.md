@@ -27,6 +27,7 @@ mode 0600; the stage contains `backend/` plus only the required migration-role f
 with both active and staged env hashes, the exact reviewed infra SHA, and the topology JSON
 path. A topology document may omit `users` when existing broker credentials stay unchanged.
 Before image transfer, `scripts/ensure-cutover-node.sh` verifies or installs the pinned official Node v22.23.2 archive under `/opt/aerocrm/tools` and checks both cutover scripts. The host needs `curl`, `xz`, `tar`, `sha256sum`, `flock`, `docker`, and write access to that tools directory.
+Migration env files retain the renderer's quoted values; the cutover parses them and passes only variable names to Docker, with unquoted values in the Docker client's private environment.
 
 `scripts/crm-contract-cutover.mjs` owns the release lock, stops all affected writers,
 requires empty contract ledgers and queues, applies migrations, imports scoped topology,

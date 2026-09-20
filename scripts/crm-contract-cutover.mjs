@@ -97,7 +97,17 @@ async function cutover(args) {
   for (const name of ['postgres.env', 'rabbitmq.env'])
     assert.equal(hash(privateFile(`${staged}/backend/${name}`)), hash(privateFile(`env/backend/${name}`)),
       'Infrastructure credentials must remain unchanged during the contract cutover');
-  for (const service of ['identity', 'notification-delivery']) privateFile(`${staged}/migrations/${service}.env`);
+  const migrationEnvs = Object.fromEntries(['identity', 'notification-delivery'].map(service => {
+    let values;
+    try { values = parseEnv(privateFile(`${staged}/migrations/${service}.env`)); }
+    catch { throw new Error(`Invalid private migration env: ${service}`); }
+    const databaseKey = `${service.replaceAll('-', '_').toUpperCase()}_DATABASE_URL`;
+    assert.deepEqual(Object.keys(values).sort(), [databaseKey, 'NODE_ENV'].sort(),
+      `Unexpected migration env fields: ${service}`);
+    assert(values[databaseKey]?.startsWith('postgresql://') && values.NODE_ENV === 'production',
+      `Invalid migration env values: ${service}`);
+    return [service, values];
+  }));
   const definitions = privateFile(definitionsFile);
   const parsed = JSON.parse(definitions);
   assert.equal(parsed.queues.length, 177, 'Unexpected target queue inventory');
@@ -195,9 +205,14 @@ async function cutover(args) {
     if (exchanges.some(exchange => exchange.name === name))
       await broker(`exchanges/aerocrm/${encodeURIComponent(name)}?if-unused=true`, 'DELETE');
   };
-  const migrate = service => run(`${service} migration`, 'docker', ['run', '--rm', '--network', 'host',
-    '--env-file', `${staged}/migrations/${service}.env`, '--entrypoint', 'node', `aerocrm/${service}:${sha}`,
-    'node_modules/prisma/build/index.js', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma']);
+  const migrationRun = (service, label, command) => {
+    const values = migrationEnvs[service];
+    return run(label, 'docker', ['run', '--rm', '--network', 'host',
+      ...Object.keys(values).flatMap(name => ['--env', name]), '--entrypoint', 'node', `aerocrm/${service}:${sha}`,
+      'node_modules/prisma/build/index.js', 'migrate', ...command, '--schema', 'prisma/schema.prisma'],
+    { env: { ...process.env, ...values } });
+  };
+  const migrate = service => migrationRun(service, `${service} migration`, ['deploy']);
   record('prepared');
   try {
     compose(['stop', '--timeout', '40', ...stoppedServices], previous);
@@ -218,9 +233,8 @@ async function cutover(args) {
     migrate('identity');
     const failed = sql('notification_delivery', `SELECT count(*) FROM notification_delivery._prisma_migrations
       WHERE migration_name = '${migration}' AND finished_at IS NULL AND rolled_back_at IS NULL;`);
-    if (failed === '1') run('Resolve atomic failed constraint migration', 'docker', ['run', '--rm', '--network', 'host',
-      '--env-file', `${staged}/migrations/notification-delivery.env`, '--entrypoint', 'node', `aerocrm/notification-delivery:${sha}`,
-      'node_modules/prisma/build/index.js', 'migrate', 'resolve', '--rolled-back', migration, '--schema', 'prisma/schema.prisma']);
+    if (failed === '1') migrationRun('notification-delivery', 'Resolve atomic failed constraint migration',
+      ['resolve', '--rolled-back', migration]);
     migrate('notification-delivery');
     // A previous guarded rollback preserves migration history. Explicitly reapply
     // the reviewed constraints on resume even if Prisma already records success.
