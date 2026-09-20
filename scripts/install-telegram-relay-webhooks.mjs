@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 vhost = Path('/etc/nginx/sites-available/telegram.aerocrm.space')
@@ -85,6 +86,7 @@ with backup.open('xb') as output:
     os.fsync(output.fileno())
 
 stage = 'install'
+probe_results = {}
 try:
     atomic_write(snippet, content)
     atomic_write(vhost, updated)
@@ -96,15 +98,26 @@ try:
         raise RuntimeError(stage)
     stage = 'loopback_probe'
     for webhook_path in ('/api/v1/telegram-bot/webhook', '/api/v1/telegram-bot/support-webhook'):
-        result = subprocess.run([
-            'curl', '--noproxy', '*', '--silent', '--show-error',
-            '--resolve', 'telegram.aerocrm.space:443:127.0.0.1',
-            '--connect-timeout', '5', '--max-time', '15', '--request', 'POST',
-            '--header', 'Content-Type: application/json', '--data', '{}',
-            '--output', '/dev/null', '--write-out', '%{http_code} %{ssl_verify_result}',
-            'https://telegram.aerocrm.space' + webhook_path
-        ], capture_output=True, timeout=18)
-        if result.returncode != 0 or result.stdout.split() != [b'401', b'0']:
+        samples = []
+        for attempt in range(10):
+            result = subprocess.run([
+                'curl', '--noproxy', '*', '--silent', '--show-error',
+                '--resolve', 'telegram.aerocrm.space:443:127.0.0.1',
+                '--connect-timeout', '5', '--max-time', '15', '--request', 'POST',
+                '--header', 'Content-Type: application/json', '--data', '{}',
+                '--output', '/dev/null', '--write-out', '%{http_code} %{ssl_verify_result}',
+                'https://telegram.aerocrm.space' + webhook_path
+            ], capture_output=True, timeout=18)
+            values = result.stdout.split()
+            samples.append({'exit': result.returncode,
+                            'http': values[0].decode() if values else None,
+                            'tls': values[1].decode() if len(values) > 1 else None})
+            if result.returncode == 0 and values == [b'401', b'0']:
+                break
+            if attempt < 9:
+                time.sleep(0.5)
+        probe_results[webhook_path] = samples[-3:]
+        if samples[-1] != {'exit': 0, 'http': '401', 'tls': '0'}:
             raise RuntimeError(stage)
 except Exception:
     atomic_write(vhost, original)
@@ -112,13 +125,14 @@ except Exception:
     rollback_valid = run(['nginx', '-t'])
     rollback_reloaded = rollback_valid and run(['systemctl', 'reload', 'nginx'])
     report(applied=False, failedStage=stage, rollbackValid=rollback_valid,
-           rollbackReloaded=rollback_reloaded, backup=str(backup))
+           rollbackReloaded=rollback_reloaded, backup=str(backup),
+           probeResults=probe_results)
     raise SystemExit(1)
 
 report(applied=True, backup=str(backup),
        vhostSha256=hashlib.sha256(updated).hexdigest(),
        snippetSha256=hashlib.sha256(content).hexdigest(),
-       loopbackProbes='both_401_tls_valid')
+       probeResults=probe_results)
 PY
 `;
 
