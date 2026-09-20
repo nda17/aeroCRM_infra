@@ -11,6 +11,7 @@ expected_env_hash=${3:?env hash required}
 cd /opt/aerocrm
 exec 9>release.lock
 flock -n 9 || { echo 'Another aeroCRM release is active' >&2; exit 1; }
+[[ ! -f releases/crm-contract-cutover.pending ]] || { echo 'CRM contract cutover pending; resume its guarded workflow before an ordinary release' >&2; exit 1; }
 [[ -f "compose/$role.yml" && -d "env/$role" ]] || exit 1
 actual_env_hash=$(cd "env/$role" && find . -maxdepth 1 -type f -name '*.env' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
 [[ "$actual_env_hash" == "$expected_env_hash" ]] || { echo 'Environment hash mismatch' >&2; exit 1; }

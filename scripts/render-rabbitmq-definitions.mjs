@@ -115,17 +115,17 @@ const notifications = [
   ['support-team-email', 'aerocrm.notification.support.team.email', 'notification.support.team.email.requested.v1'],
   ['support-team-telegram', 'aerocrm.notification.support.team.telegram', 'notification.support.team.telegram.requested.v1'],
   ['support-client-email', 'aerocrm.notification.support.client.email', 'notification.support.client.email.requested.v1'],
-  ['wincrm-intake-sla-email', 'aerocrm.notification.wincrm.intake-sla.email', 'notification.wincrm.intake-sla.email.requested.v1'],
-  ['wincrm-intake-sla-telegram', 'aerocrm.notification.wincrm.intake-sla.telegram', 'notification.wincrm.intake-sla.telegram.requested.v1'],
+  ['crm-intake-sla-email', 'aerocrm.notification.crm.intake-sla.email', 'notification.crm.intake-sla.email.requested.v1'],
+  ['crm-intake-sla-telegram', 'aerocrm.notification.crm.intake-sla.telegram', 'notification.crm.intake-sla.telegram.requested.v1'],
   ['campaign-email', 'aerocrm.notification.campaign.email.v2', 'notification.campaign.email.requested.v2'],
   ['campaign-telegram', 'aerocrm.notification.campaign.telegram.v2', 'notification.campaign.telegram.requested.v2'],
   ['daily-summary-delivery-telegram', 'aerocrm.notification.daily-summary.telegram', 'notification.daily-summary.telegram.requested.v1'],
   ['operations-backup-report-telegram', 'aerocrm.notification.operations.backup-report.telegram', 'notification.operations.backup-report.telegram.requested.v1'],
   ['subscription-expiry-email', 'aerocrm.notification.subscription-expiry.email', 'notification.subscription-expiry.email.requested.v1'],
   ['subscription-expiry-telegram', 'aerocrm.notification.subscription-expiry.telegram', 'notification.subscription-expiry.telegram.requested.v1'],
-  ['wincrm-invitation-email', 'aerocrm.notification.wincrm.invitation.email', 'notification.wincrm.invitation.email.requested.v1'],
-  ['wincrm-task-reminder-email', 'aerocrm.notification.wincrm.task-reminder.email', 'notification.wincrm.task-reminder.email.requested.v1'],
-  ['wincrm-task-reminder-telegram', 'aerocrm.notification.wincrm.task-reminder.telegram', 'notification.wincrm.task-reminder.telegram.requested.v1']
+  ['crm-invitation-email', 'aerocrm.notification.crm.invitation.email', 'notification.crm.invitation.email.requested.v1'],
+  ['crm-task-reminder-email', 'aerocrm.notification.crm.task-reminder.email', 'notification.crm.task-reminder.email.requested.v1'],
+  ['crm-task-reminder-telegram', 'aerocrm.notification.crm.task-reminder.telegram', 'notification.crm.task-reminder.telegram.requested.v1']
 ];
 const notificationSource = fs.readFileSync(path.join(source, 'notification-delivery/src/messaging/messaging.constants.ts'), 'utf8');
 const rendererSource = fs.readFileSync(path.join(root, 'aeroCRM_infra/scripts/render-env.mjs'), 'utf8');
@@ -199,9 +199,9 @@ for (const [kind, name, route] of [
     bind(target, billingRetry, `${kind}.retry.${i + 1}`);
   }
 }
-const providerExchange = 'aerocrm.billing.wincrm-provider.dead-letter';
-const providerQueue = 'aerocrm.billing.wincrm-provider.v1';
-const providerRoute = 'billing.wincrm.provider-operation.requested.v1';
+const providerExchange = 'aerocrm.billing.crm-provider.dead-letter';
+const providerQueue = 'aerocrm.billing.crm-provider.v1';
+const providerRoute = 'billing.crm.provider-operation.requested.v1';
 exchange(providerExchange, 'direct'); queue(providerQueue); bind(providerQueue, events, providerRoute);
 queue(`${providerQueue}.dead-letter`); bind(`${providerQueue}.dead-letter`, providerExchange, providerRoute);
 
@@ -242,7 +242,7 @@ for (const [kind, name, route] of [
 // CRM Access retries are durable PostgreSQL Outbox records; no TTL queue is used.
 for (const [kind, route] of [
   ['provision', 'crm.access.invitation-provision.v1'],
-  ['acceptance', 'identity.wincrm.invitation-accepted.v1'],
+  ['acceptance', 'identity.crm.invitation-accepted.v1'],
   ['admission', 'crm.access.admission-wake.v1']
 ]) {
   const name = `aerocrm.crm-access.team.${kind}`;
@@ -300,14 +300,14 @@ sourceIncludes('support/src/web/support-notifications.service.ts', [
 sourceIncludes('billing/src/messaging/billing-messaging.constants.ts', [billingRetry, billingDead,
   'aerocrm.billing.identity.v1', 'aerocrm.billing.offer.v2',
   'aerocrm.billing.notification-routing.v1', 'aerocrm.billing.lifecycle-repair.v1']);
-sourceIncludes('billing/src/provider/wincrm-provider.config.ts', [providerExchange, providerQueue, providerRoute]);
+sourceIncludes('billing/src/provider/crm-provider.config.ts', [providerExchange, providerQueue, providerRoute]);
 sourceIncludes('campaigns/src/messaging/campaigns-messaging.constants.ts', [campaignsRetry,
   'aerocrm.campaigns.snapshot', 'aerocrm.campaigns.delivery-outcome.v2']);
 sourceIncludes('reporting/src/messaging/reporting-messaging.constants.ts', [reportingRetry, reportingManual,
   'aerocrm.reporting.identity-user', 'aerocrm.reporting.crm-order',
   'aerocrm.reporting.crm-entitlement', 'aerocrm.reporting.settings', 'aerocrm.reporting.delivery-outcome']);
 sourceIncludes('crm-access/src/team/team.util.ts', [
-  'crm.access.invitation-provision.v1', 'identity.wincrm.invitation-accepted.v1', 'crm.access.admission-wake.v1']);
+  'crm.access.invitation-provision.v1', 'identity.crm.invitation-accepted.v1', 'crm.access.admission-wake.v1']);
 if (!fs.readFileSync(path.join(source, 'crm-access/src/team/team-messaging.contract.ts'), 'utf8')
   .includes('`aerocrm.crm-access.team.${consumer}`')) throw new Error('CRM Access queue contract drift');
 sourceIncludes('crm-intake/src/acceptance/acceptance.messaging.ts', [
@@ -375,7 +375,7 @@ const operationsReadPattern =
   '^aerocrm\\.(?:operations\\.(?:admin\\.audit\\.(?:campaigns|reporting|billing|identity|platform|support)\\.v1(?:\\.retry-v1|\\.dead-letter)?|scheduled-jobs\\.v1(?:\\.retry-v1|\\.dead-letter)?)|events|retry|dead-letter|manual-retry)$';
 // Erlang/PCRE subroutine (?4) reuses (email|telegram), keeping the exact ACL under 256 bytes.
 const notificationReadPattern =
-  '^aerocrm\\.notification\\.((support\\.team|wincrm\\.(intake-sla|task-reminder))\\.(email|telegram)|(support\\.client|wincrm\\.invitation)\\.email|campaign\\.(?4)\\.v2|(daily-summary|operations\\.backup-report|subscription-expiry)\\.telegram)(\\.dead-letter)?$';
+  '^aerocrm\\.notification\\.((support\\.team|crm\\.(intake-sla|task-reminder))\\.(email|telegram)|(support\\.client|crm\\.invitation)\\.email|campaign\\.(?4)\\.v2|(daily-summary|operations\\.backup-report|subscription-expiry)\\.telegram)(\\.dead-letter)?$';
 // JavaScript lacks PCRE subroutines; expand this fixed, non-recursive group for inventory checks.
 const permissionPattern = expression => new RegExp(expression.replaceAll('(?4)', '(email|telegram)'));
 const permissions = runtimes.map(runtime => {

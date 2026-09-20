@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Renders private runtime files from the approved questionnaire and newly generated
-// service credentials. Never imports .env.example or old WinWidget production env.
+// service credentials. Never imports .env.example or another product's production env.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -94,8 +94,9 @@ for (const [service, role, port, explicit] of roles) {
       'YANDEX_CLIENT_ID', 'YANDEX_CLIENT_SECRET', 'VK_CLIENT_ID', 'VK_SERVICE_TOKEN',
       'TURNSTILE_ENABLED', 'TURNSTILE_SECRET_KEY', 'TELEGRAM_INFO_BOT_TOKEN', 'TELEGRAM_INFO_BOT_USERNAME',
       'TELEGRAM_INFO_BOT_WEBHOOK_SECRET', 'TELEGRAM_API_BASE_URL', 'TELEGRAM_WEBHOOK_HOST']),
-    { TURNSTILE_EXPECTED_HOSTNAME: new URL(q('NEXT_PUBLIC_MAIN_APP_URL')).hostname,
+    { TURNSTILE_EXPECTED_HOSTNAMES: [new URL(q('NEXT_PUBLIC_MAIN_APP_URL')).hostname, new URL(q('NEXT_PUBLIC_APP_URL')).hostname].join(','),
       TURNSTILE_CLIENT_URL: new URL(q('NEXT_PUBLIC_MAIN_APP_URL')).origin,
+      OAUTH_WORKSPACE_CLIENT_URL: new URL(q('NEXT_PUBLIC_APP_URL')).origin,
       IDENTITY_LOGIN_OTP_ENABLED: 'true', CRM_INVITATION_EMAIL_ENABLED: 'true',
       ...Object.fromEntries(['google', 'yandex', 'vk'].map(provider => [`${provider.toUpperCase()}_CALLBACK_URL`,
         `${new URL(q('NEXT_PUBLIC_API_URL')).origin}/api/v1/auth/${provider}/redirect`])) });
@@ -112,8 +113,8 @@ for (const [service, role, port, explicit] of roles) {
     base('SUPPORT'), base('CRM_INTAKE'), base('CRM_SALES'),
     tokens(['SUPPORT_NOTIFICATION_DELIVERY_TOKEN', 'CRM_INTAKE_NOTIFICATION_DELIVERY_TOKEN', 'CRM_SALES_NOTIFICATION_DELIVERY_TOKEN',
       'NOTIFICATION_DELIVERY_CRM_INTAKE_TOKEN', 'NOTIFICATION_DELIVERY_CRM_SALES_TOKEN', 'NOTIFICATION_DELIVERY_OPERATIONS_TOKEN']),
-    { NOTIFICATION_DELIVERY_KINDS: ['campaign-email', 'campaign-telegram', 'daily-summary-delivery-telegram', 'wincrm-invitation-email',
-      'wincrm-task-reminder-email', 'wincrm-task-reminder-telegram', 'wincrm-intake-sla-email', 'wincrm-intake-sla-telegram',
+    { NOTIFICATION_DELIVERY_KINDS: ['campaign-email', 'campaign-telegram', 'daily-summary-delivery-telegram', 'crm-invitation-email',
+      'crm-task-reminder-email', 'crm-task-reminder-telegram', 'crm-intake-sla-email', 'crm-intake-sla-telegram',
       'support-team-email', 'support-team-telegram', 'support-client-email', 'subscription-expiry-telegram', 'operations-backup-report-telegram'].join(',') });
   if (service === 'campaigns') Object.assign(env, identityClient('CAMPAIGNS'), base('BILLING'), tokens(['BILLING_CAMPAIGNS_TOKEN', 'CAMPAIGNS_OPERATIONS_TOKEN']));
   if (service === 'reporting') Object.assign(env, identityClient('REPORTING'), base('OPERATIONS'), tokens(['REPORTING_INTERNAL_TOKEN', 'REPORTING_OPERATIONS_TOKEN']));
