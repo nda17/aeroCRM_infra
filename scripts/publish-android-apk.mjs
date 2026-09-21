@@ -41,6 +41,12 @@ const endpoint = new URL(input('ENDPOINT'));
 assert.equal(endpoint.protocol, 'https:');
 const Key = `aerocrm/android/${manifest.appVersionName}/aeroCRM.apk`;
 const forcePathStyle = input('FORCE_PATH_STYLE') === 'true';
+const sourceUrl = new URL(endpoint);
+if (forcePathStyle) sourceUrl.pathname = `/${Bucket}/${Key}`;
+else { sourceUrl.hostname = `${Bucket}.${sourceUrl.hostname}`; sourceUrl.pathname = `/${Key}`; }
+const downloadUrl = 'https://aerocrm.space/downloads/aeroCRM.apk';
+assert(fs.readFileSync(path.join(root, 'aeroCRM_infra/nginx/frontends.conf'), 'utf8')
+  .includes(`proxy_pass ${sourceUrl.href};`), 'APK proxy must target the same immutable S3 version');
 const client = new S3Client({ endpoint: endpoint.href, region: input('REGION'), forcePathStyle,
   credentials: { accessKeyId: input('ACCESS_KEY_ID'), secretAccessKey: input('SECRET_ACCESS_KEY') }, maxAttempts: 2 });
 try {
@@ -53,10 +59,7 @@ try {
     CacheControl: 'public, max-age=31536000, immutable', Metadata: { sha256 }, ContentLength: body.length }));
   const stored = await client.send(new GetObjectCommand({ Bucket, Key }));
   assert(Buffer.from(await stored.Body.transformToByteArray()).equals(body), 'Authenticated S3 readback differs');
-  const url = new URL(endpoint);
-  if (forcePathStyle) url.pathname = `/${Bucket}/${Key}`;
-  else { url.hostname = `${Bucket}.${url.hostname}`; url.pathname = `/${Key}`; }
-  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(sourceUrl, { redirect: 'error', signal: AbortSignal.timeout(30_000) });
   assert.equal(response.status, 200, 'Anonymous APK download is unavailable');
   assert.equal(response.headers.get('content-type'), 'application/vnd.android.package-archive');
   assert(response.headers.get('content-disposition')?.includes('aeroCRM.apk'));
@@ -64,10 +67,10 @@ try {
   const releaseFile = path.join(root, 'aeroCRM_monorepo/aeroCRM_frontends/brand/android-release.json');
   const release = JSON.parse(fs.readFileSync(releaseFile, 'utf8'));
   Object.assign(release, { available: true, versionName: manifest.appVersionName, versionCode: manifest.appVersionCode,
-    packageId: manifest.packageId, downloadUrl: url.href, sizeBytes: body.length, sha256,
+    packageId: manifest.packageId, downloadUrl, sizeBytes: body.length, sha256,
     minSdk: manifest.minSdkVersion, minAndroidVersion: '10', compatibleBrowser: 'Актуальный Chrome или другой браузер с поддержкой TWA' });
   fs.writeFileSync(releaseFile, `${JSON.stringify(release, null, 2)}\n`);
-  console.log(JSON.stringify({ downloadUrl: url.href, sizeBytes: body.length, sha256, publicReadbackVerified: true }));
+  console.log(JSON.stringify({ downloadUrl, sourceUrl: sourceUrl.href, sizeBytes: body.length, sha256, publicReadbackVerified: true }));
 } catch (error) {
   if (error.code === 'ERR_ASSERTION') throw error;
   throw new Error(`S3 publication failed: ${error.name} HTTP ${error.$metadata?.httpStatusCode ?? 'n/a'}; private details withheld`);

@@ -63,5 +63,17 @@ Subsequent releases leave `billing_capacity_migration=false` and the hash empty.
 Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.
 `scripts/publish-android-apk.mjs` verifies its certificate, publishes only the versioned
 APK object to the agreed `content-files` bucket, verifies anonymous download bytes, and
-updates the landing release metadata. A published version cannot be replaced with different
-bytes. Signing keys and their encrypted backup stay outside Git and S3.
+updates the landing release metadata with `https://aerocrm.space/downloads/aeroCRM.apk`.
+The exact Nginx route proxies only the reviewed versioned S3 object over verified HTTPS,
+without forwarding browser credentials. Update that fixed target for each new APK version
+before running the publisher. The frontend release transfers the reviewed config and,
+under `release.lock` after app health checks, uses the root-owned
+`/usr/local/sbin/aerocrm-nginx-release` helper for drift-checked install, `nginx -t`,
+reload, and rollback. Bootstrap this helper from the reviewed infra commit as root once;
+grant the `aerocrm` account passwordless sudo for this exact helper only. A changed
+`frontends.conf` requires a reviewed helper with its new SHA-256 before release. The
+helper accepts the original vhost SHA-256 only for the first install and records later
+applied hashes in its root-owned state. After deployment, verify GET bytes and SHA-256,
+HEAD, a small Range request, POST 405, query 400, and no redirect or `Set-Cookie` through
+the same-origin route. A published S3 version cannot be replaced with
+different bytes. Signing keys and their encrypted backup stay outside Git and S3.
