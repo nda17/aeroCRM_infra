@@ -20,6 +20,14 @@ const migrations = {
   '20260921020100_crm_custom_roles': '5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876',
   '20260921030100_crm_admin_seat_capacity': '56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d'
 };
+const resolvedBaselineAttempt = Object.freeze({
+  migration_name: '20260920000000_init_aerocrm',
+  checksum: '2a7fdd85882cc55b6893d2024f920788c1ea03e1d8497ad218770558ebce0793',
+  started_at_utc: '2026-09-19T22:05:46.748634Z',
+  finished_at_utc: null,
+  rolled_back_at_utc: '2026-09-19T22:07:20.080831Z',
+  applied_steps_count: 0
+});
 
 function run(label, executable, args, options = {}) {
   try {
@@ -41,19 +49,65 @@ function inspect(password, query) {
   ], { env: { ...process.env, PGPASSWORD: password } }));
 }
 function migrationRows(password) {
-  return inspect(password, `SELECT COALESCE(json_agg(row_to_json(m) ORDER BY m.migration_name), '[]'::json)::text
-    FROM (SELECT migration_name, checksum, finished_at IS NOT NULL AS finished,
-      rolled_back_at IS NOT NULL AS rolled_back FROM crm_access._prisma_migrations) m;`);
+  return inspect(password, `SELECT COALESCE(json_agg(row_to_json(m) ORDER BY m.started_at_utc), '[]'::json)::text
+    FROM (SELECT migration_name, checksum,
+      to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS started_at_utc,
+      to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS finished_at_utc,
+      to_char(rolled_back_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS rolled_back_at_utc,
+      applied_steps_count FROM crm_access._prisma_migrations) m;`);
 }
-function verifyMigrations(rows, expectedNames) {
-  assert.deepEqual(rows.map(row => row.migration_name), expectedNames,
-    'Unexpected CRM Access migration history');
-  for (const row of rows) {
+function isResolvedBaselineAttempt(row) {
+  return Object.entries(resolvedBaselineAttempt).every(([key, value]) => row[key] === value);
+}
+function activeMigrationRows(rows) {
+  const resolved = rows.filter(isResolvedBaselineAttempt);
+  assert(resolved.length <= 1, 'Unexpected duplicate resolved CRM Access baseline attempt');
+  const active = rows.filter(row => !isResolvedBaselineAttempt(row));
+  for (const row of active) {
+    assert(Object.hasOwn(migrations, row.migration_name),
+      `Unexpected CRM Access migration: ${row.migration_name}`);
     assert.equal(row.checksum, migrations[row.migration_name],
       `CRM Access migration checksum mismatch: ${row.migration_name}`);
-    assert(row.finished === true && row.rolled_back === false,
+    assert(row.finished_at_utc !== null && row.rolled_back_at_utc === null &&
+      Number.isInteger(row.applied_steps_count) && row.applied_steps_count > 0,
       `Incomplete CRM Access migration: ${row.migration_name}`);
   }
+  return active;
+}
+function verifyMigrations(rows, expectedNames) {
+  const active = activeMigrationRows(rows);
+  assert.deepEqual(active.map(row => row.migration_name), expectedNames,
+    'Unexpected CRM Access migration history');
+  return active;
+}
+function verifyMigrationHistoryFixtures() {
+  const successfulBaseline = {
+    migration_name: resolvedBaselineAttempt.migration_name,
+    checksum: migrations[resolvedBaselineAttempt.migration_name],
+    started_at_utc: '2026-09-19T22:07:47.008001Z',
+    finished_at_utc: '2026-09-19T22:07:47.157935Z',
+    rolled_back_at_utc: null,
+    applied_steps_count: 1
+  };
+  assert.deepEqual(verifyMigrations(
+    [resolvedBaselineAttempt, successfulBaseline],
+    [resolvedBaselineAttempt.migration_name]
+  ), [successfulBaseline]);
+  assert.throws(() => activeMigrationRows([
+    { ...resolvedBaselineAttempt, checksum: '0'.repeat(64) }
+  ]), /checksum mismatch/);
+  assert.throws(() => activeMigrationRows([
+    { ...successfulBaseline, finished_at_utc: null }
+  ]), /Incomplete CRM Access migration/);
+  assert.throws(() => verifyMigrations(
+    [successfulBaseline, { ...successfulBaseline, started_at_utc: '2026-09-19T22:08:00.000000Z' }],
+    [successfulBaseline.migration_name]
+  ), /Unexpected CRM Access migration history/);
+}
+verifyMigrationHistoryFixtures();
+if (process.argv.length === 3 && process.argv[2] === '--history-self-test') {
+  console.log('CRM Access migration history fixtures verified');
+  process.exit(0);
 }
 function readPrivateEnv(file) {
   const fileStat = fs.lstatSync(file);
@@ -109,8 +163,9 @@ assert.deepEqual(imageMigrations,
   Object.entries(migrations).map(([name, checksum]) => ({ name, checksum })),
   'CRM Access image migration files differ from reviewed inventory');
 const before = migrationRows(password);
-assert([1, 2, 3, 4].includes(before.length), 'Unexpected CRM Access migration history');
-verifyMigrations(before, Object.keys(migrations).slice(0, before.length));
+const activeBefore = activeMigrationRows(before);
+assert([1, 2, 3, 4].includes(activeBefore.length), 'Unexpected CRM Access migration history');
+verifyMigrations(before, Object.keys(migrations).slice(0, activeBefore.length));
 run('CRM Access Prisma migration', 'docker', [
   'run', '--rm', '--network', 'host', '--env', 'NODE_ENV', '--env', 'CRM_ACCESS_DATABASE_URL',
   '--entrypoint', 'node', image, 'node_modules/prisma/build/index.js', 'migrate', 'deploy',
