@@ -67,7 +67,7 @@ for (const service of services) {
   }
   for (const type of contract.types) sql.push(`REVOKE ALL ON TYPE ${ident(schema)}.${ident(type)} FROM PUBLIC, ${ident(runtime)}, ${ident(backup)}; GRANT USAGE ON TYPE ${ident(schema)}.${ident(type)} TO ${ident(runtime)}, ${ident(backup)};`);
   for (const signature of contract.routineExecute || []) {
-    if (!/^[a-z_]+\((?:text)?\)$/.test(signature)) throw new Error('Unsupported routine signature');
+    if (!/^[a-z_]+\((?:text(?:\[\])?)?\)$/.test(signature)) throw new Error('Unsupported routine signature');
     sql.push(`GRANT EXECUTE ON FUNCTION ${ident(schema)}.${signature} TO ${ident(runtime)};`);
   }
   sql.push(`DO $verify$ DECLARE obj record; expected jsonb; privilege text; permitted boolean; role_name text; BEGIN`,

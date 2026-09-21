@@ -58,6 +58,21 @@ foreign keys before and after Prisma deploy. A failure before image switching le
 previous runtime running; successful additive DDL remains on a later image rollback.
 Subsequent releases leave `billing_capacity_migration=false` and the hash empty.
 
+## CRM custom roles migration
+
+The first compatible backend release applies the additive CRM Access migrations
+`20260921020000_add_crm_custom_member_role` and `20260921020100_crm_custom_roles`.
+Use `target=backend`, `crm_custom_roles_migration=true`, and provide the SHA-256 of
+the private fixed file `/opt/aerocrm/env/migrations/crm-access.env`. The file is a
+regular non-symlink with mode 0600 and contains only `NODE_ENV=production` and the
+loopback migration-role `CRM_ACCESS_DATABASE_URL`. All three CRM Access runtime env
+files must still set `CRM_ACCESS_CUSTOM_ROLES_ENABLED=false`. Under `release.lock`,
+the helper checks the exact image and migration inventory, applies the two migrations,
+installs and verifies the catalog table/function ACL, and then permits the ordinary
+backend image switch. Future releases leave the migration flag false and hash empty.
+Enabling custom-role writes is a separate reviewed env release after every compatible
+reader and worker is running.
+
 ## Android artifact
 
 Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.

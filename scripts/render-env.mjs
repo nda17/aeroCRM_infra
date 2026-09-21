@@ -15,6 +15,11 @@ const required = (source, key) => {
 };
 const q = key => required(input, key);
 const g = key => required(generated, key);
+const booleanInput = (key, fallback = 'false') => {
+  const value = (input[key] ?? fallback).trim();
+  if (!['true', 'false'].includes(value)) throw new Error(`Invalid boolean private input: ${key}`);
+  return value;
+};
 const selected = (source, keys) => Object.fromEntries(keys.map(key => [key, required(source, key)]));
 const providers = keys => selected(input, keys);
 const tokens = keys => selected(generated, keys);
@@ -144,6 +149,7 @@ for (const [service, role, port, explicit] of roles) {
   }
   if (service === 'crm-access') {
     env.CRM_ACCESS_BILLING_ENABLED = q('CRM_ACCESS_BILLING_ENABLED');
+    env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = booleanInput('CRM_ACCESS_CUSTOM_ROLES_ENABLED');
     // The Access module constructs its service clients in every process role.
     Object.assign(env, identityClient('CRM_ACCESS'), base('BILLING'), base('CRM_SALES'), tokens([
       'BILLING_CRM_ACCESS_TOKEN', 'BILLING_CRM_ACCESS_COMMERCE_TOKEN', 'CRM_ACCESS_CRM_CUSTOMERS_TOKEN',

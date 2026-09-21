@@ -7,15 +7,24 @@ sha=${2:?exact commit SHA required}
 expected_env_hash=${3:?env hash required}
 billing_capacity_migration=${4:-false}
 billing_migration_env_hash=${5:-}
-[[ $# -le 5 ]] || exit 64
+crm_custom_roles_migration=${6:-false}
+crm_custom_roles_migration_env_hash=${7:-}
+[[ $# -le 7 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 [[ "$billing_capacity_migration" == true || "$billing_capacity_migration" == false ]] || exit 64
+[[ "$crm_custom_roles_migration" == true || "$crm_custom_roles_migration" == false ]] || exit 64
+[[ "$billing_capacity_migration" != true || "$crm_custom_roles_migration" != true ]] || exit 64
 if [[ "$billing_capacity_migration" == true ]]; then
   [[ "$role" == backend && "$billing_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 else
   [[ -z "$billing_migration_env_hash" ]] || exit 64
+fi
+if [[ "$crm_custom_roles_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_custom_roles_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
+else
+  [[ -z "$crm_custom_roles_migration_env_hash" ]] || exit 64
 fi
 cd /opt/aerocrm
 exec 9>release.lock
@@ -46,6 +55,12 @@ if [[ "$billing_capacity_migration" == true ]]; then
   [[ -x "$node_bin" ]] || { echo 'Pinned Billing migration Node is unavailable' >&2; exit 1; }
   "$node_bin" --check scripts/billing-capacity-migration.mjs
   "$node_bin" scripts/billing-capacity-migration.mjs "$sha" "$billing_migration_env_hash"
+fi
+if [[ "$crm_custom_roles_migration" == true ]]; then
+  node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
+  [[ -x "$node_bin" ]] || { echo 'Pinned CRM Access migration Node is unavailable' >&2; exit 1; }
+  "$node_bin" --check scripts/crm-custom-roles-migration.mjs
+  "$node_bin" scripts/crm-custom-roles-migration.mjs "$sha" "$crm_custom_roles_migration_env_hash"
 fi
 previous=$(cat "releases/$role.sha" 2>/dev/null || true)
 export IMAGE_SHA="$sha"
