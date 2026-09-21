@@ -17,7 +17,8 @@ const runtimeEnvFiles = [
 const migrations = {
   '20260920000000_init_aerocrm': '5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14',
   '20260921020000_add_crm_custom_member_role': '2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514',
-  '20260921020100_crm_custom_roles': '5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876'
+  '20260921020100_crm_custom_roles': '5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876',
+  '20260921030100_crm_admin_seat_capacity': '56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d'
 };
 
 function run(label, executable, args, options = {}) {
@@ -108,7 +109,7 @@ assert.deepEqual(imageMigrations,
   Object.entries(migrations).map(([name, checksum]) => ({ name, checksum })),
   'CRM Access image migration files differ from reviewed inventory');
 const before = migrationRows(password);
-assert([1, 2, 3].includes(before.length), 'Unexpected custom-role migration history');
+assert([1, 2, 3, 4].includes(before.length), 'Unexpected CRM Access migration history');
 verifyMigrations(before, Object.keys(migrations).slice(0, before.length));
 run('CRM Access Prisma migration', 'docker', [
   'run', '--rm', '--network', 'host', '--env', 'NODE_ENV', '--env', 'CRM_ACCESS_DATABASE_URL',
@@ -158,4 +159,15 @@ const contract = inspect(password, `SELECT json_build_object(
 assert.deepEqual(contract, { customEnum: true, table: true, constraints: true, activeNameIndex: true,
   memberBinding: true, invitationBinding: true, runtimeGrants: true, backupGrants: true,
   publicFunctionRevoked: true }, 'CRM Access custom-role schema or grants incomplete');
-console.log('CRM Access custom-role migrations and runtime grants verified');
+const adminSeatContract = inspect(password, `SELECT json_build_object(
+  'commandType', EXISTS (SELECT 1 FROM pg_constraint
+    WHERE conrelid='crm_access.crm_billing_operations'::regclass
+      AND conname='crm_billing_operations_command_type_check'
+      AND pg_get_constraintdef(oid) LIKE '%ADMIN_SET_AEROCRM_SEATS%'),
+  'fenceBinding', EXISTS (SELECT 1 FROM pg_constraint
+    WHERE conrelid='crm_access.crm_billing_operations'::regclass
+      AND conname='crm_billing_operations_condition_2_check'
+      AND pg_get_constraintdef(oid) LIKE '%ADMIN_SET_AEROCRM_SEATS%'))::text;`);
+assert.deepEqual(adminSeatContract, { commandType: true, fenceBinding: true },
+  'CRM Access administrative seat capacity contract incomplete');
+console.log('CRM Access custom-role and administrative seat migrations verified');

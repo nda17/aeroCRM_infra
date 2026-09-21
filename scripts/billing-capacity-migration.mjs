@@ -10,10 +10,12 @@ const [sha, expectedEnvHash] = process.argv.slice(2);
 const image = `aerocrm/billing:${sha}`;
 const envFile = '/opt/aerocrm/env/migrations/billing.env';
 const baseline = '20260920000000_init_aerocrm';
-const migration = '20260921010000_defer_crm_capacity_bindings';
+const capacityMigration = '20260921010000_defer_crm_capacity_bindings';
+const seatMigration = '20260921030000_crm_admin_seat_adjustments';
 const checksums = {
   [baseline]: 'b6a6babe34607ec210b864289d5f17b285c4924234e3570a9acf190253d85266',
-  [migration]: '9318239e1b2e2926102f643faacd852782bb64901028f9950eb586fc2d498307'
+  [capacityMigration]: '9318239e1b2e2926102f643faacd852782bb64901028f9950eb586fc2d498307',
+  [seatMigration]: '8deb754f74e6a495ad1c42774f1e7ccb27243358ff6452c62d52037d5cd81201'
 };
 const constraints = [
   ['crm_orders', 'crm_orders_capacity_command_id_workspace_id_owner_subject_fkey'],
@@ -59,9 +61,8 @@ function constraintRows(password) {
       ('crm_orders_capacity_command_id_workspace_id_owner_subject_fkey',
        'crm_commerce_accounts_capacity_owner_fkey')) fk;`);
 }
-function verifyMigrations(rows, applied) {
-  const expected = applied ? [baseline, migration] : [baseline];
-  assert.deepEqual(rows.map(row => row.migration_name).sort(), expected.sort(),
+function verifyMigrations(rows, expected) {
+  assert.deepEqual(rows.map(row => row.migration_name), expected,
     'Unexpected Billing migration history');
   for (const row of rows) {
     assert.equal(row.checksum, checksums[row.migration_name],
@@ -69,6 +70,19 @@ function verifyMigrations(rows, applied) {
     assert(row.finished === true && row.rolled_back === false,
       `Incomplete Billing migration: ${row.migration_name}`);
   }
+}
+function seatContract(password) {
+  return inspectDatabase(password, `SELECT json_build_object(
+    'table', to_regclass('billing.crm_admin_seat_adjustments') IS NOT NULL,
+    'constraints', (SELECT count(*)=11 FROM pg_constraint
+      WHERE conrelid='billing.crm_admin_seat_adjustments'::regclass AND contype <> 'n'),
+    'triggers', (SELECT count(*)=2 FROM pg_trigger WHERE tgrelid='billing.crm_admin_seat_adjustments'::regclass AND NOT tgisinternal
+      AND tgname IN ('crm_admin_seat_adjustments_append_only','crm_admin_seat_adjustments_no_truncate')),
+    'runtimeGrants', has_table_privilege('aerocrm_billing_runtime','billing.crm_admin_seat_adjustments','SELECT')
+      AND has_table_privilege('aerocrm_billing_runtime','billing.crm_admin_seat_adjustments','INSERT')
+      AND NOT has_table_privilege('aerocrm_billing_runtime','billing.crm_admin_seat_adjustments','UPDATE')
+      AND NOT has_table_privilege('aerocrm_billing_runtime','billing.crm_admin_seat_adjustments','DELETE'),
+    'backupGrant', has_table_privilege('aerocrm_billing_backup','billing.crm_admin_seat_adjustments','SELECT'))::text;`);
 }
 function verifyConstraints(rows, deferred) {
   assert.equal(rows.length, constraints.length, 'Incomplete Billing capacity FK inventory');
@@ -128,15 +142,28 @@ assert.deepEqual(imageMigrations,
     .sort((a, b) => a.name.localeCompare(b.name)),
   'Billing image migration files differ from reviewed baseline and additive migration');
 
+const expectedNames = Object.keys(checksums);
 const before = migrationRows(password);
-const alreadyApplied = before.some(row => row.migration_name === migration);
-verifyMigrations(before, alreadyApplied);
-verifyConstraints(constraintRows(password), alreadyApplied);
+assert([2, 3].includes(before.length), 'Unexpected Billing migration history');
+verifyMigrations(before, expectedNames.slice(0, before.length));
+verifyConstraints(constraintRows(password), true);
 run('Billing Prisma migration', 'docker', [
   'run', '--rm', '--network', 'host', '--env', 'NODE_ENV',
   '--env', 'BILLING_DATABASE_URL', '--entrypoint', 'node', image,
   'node_modules/prisma/build/index.js', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'
 ], { env: { ...process.env, ...values } });
-verifyMigrations(migrationRows(password), true);
+run('Billing administrative seat ACL apply', 'docker', [
+  'run', '--rm', '--network', 'host', '--env', 'PGPASSWORD', '--entrypoint', 'psql', 'postgres:18',
+  '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', '5432',
+  '-U', 'aerocrm_billing_migration', '-d', 'aerocrm_billing', '-c',
+  `BEGIN;
+   REVOKE ALL ON TABLE billing.crm_admin_seat_adjustments FROM PUBLIC, aerocrm_billing_runtime, aerocrm_billing_backup;
+   GRANT SELECT, INSERT ON TABLE billing.crm_admin_seat_adjustments TO aerocrm_billing_runtime;
+   GRANT SELECT ON TABLE billing.crm_admin_seat_adjustments TO aerocrm_billing_backup;
+   COMMIT;`
+], { env: { ...process.env, PGPASSWORD: password } });
+verifyMigrations(migrationRows(password), expectedNames);
 verifyConstraints(constraintRows(password), true);
-console.log('Billing capacity FK migration verified');
+assert.deepEqual(seatContract(password), { table: true, constraints: true, triggers: true,
+  runtimeGrants: true, backupGrant: true }, 'Billing administrative seat schema or grants incomplete');
+console.log('Billing capacity and administrative seat migrations verified');

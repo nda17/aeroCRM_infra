@@ -12,6 +12,7 @@ case "${1:-}" in
   '') checked_scripts=(crm-contract-cutover.mjs crm-contract-cutover-preflight.mjs) ;;
   --billing) checked_scripts=(billing-capacity-migration.mjs) ;;
   --crm-custom-roles) checked_scripts=(crm-custom-roles-migration.mjs) ;;
+  --rollback-guard) checked_scripts=(backend-rollback-compatibility-guard.mjs) ;;
   *) echo 'Unknown Node verification mode' >&2; exit 64 ;;
 esac
 [[ $# -le 1 ]] || { echo 'Too many Node verification arguments' >&2; exit 64; }

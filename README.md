@@ -41,37 +41,49 @@ and resume the same reviewed SHA/config using `crm_contracts_cutover_resume=true
 Do not perform an image-only rollback across this contract migration. After successful
 cutover, ordinary releases use `scripts/release.sh` again.
 
-## Billing capacity FK migration
+## Billing capacity and administrative-seat migrations
 
-The additive Billing migration `20260921010000_defer_crm_capacity_bindings` makes two
-capacity foreign keys deferred within an existing checkout transaction. For its first
-backend release only, set `target=backend`, `billing_capacity_migration=true`, and
-`billing_migration_env_hash` to the SHA-256 of the private fixed VPS file
+The Billing migrations `20260921010000_defer_crm_capacity_bindings` and
+`20260921030000_crm_admin_seat_adjustments` defer two capacity foreign keys and add the
+append-only administrative seat ledger. The first compatible backend release is
+coordinated with the CRM Access migrations below: set `target=backend`, both
+`billing_capacity_migration=true` and `crm_custom_roles_migration=true`, and provide both
+private env hashes. `billing_migration_env_hash` is the SHA-256 of the fixed VPS file
 `/opt/aerocrm/env/migrations/billing.env`. The file must be regular, non-symlinked,
 mode 0600, and contain only `NODE_ENV=production` and a loopback
 `BILLING_DATABASE_URL` for the `aerocrm_billing_migration` role, `aerocrm_billing`
 database and `billing` schema. The workflow verifies a pinned local Node runtime before
 image transfer. Under the ordinary release lock, `scripts/release.sh` checks exact images
-and active env, then runs `scripts/billing-capacity-migration.mjs` before switching images.
-The helper verifies the image migration inventory, existing migration history and both
-foreign keys before and after Prisma deploy. A failure before image switching leaves the
-previous runtime running; successful additive DDL remains on a later image rollback.
-Subsequent releases leave `billing_capacity_migration=false` and the hash empty.
+and active env, then runs both migration helpers before switching images. The Billing
+helper verifies the exact migration inventory and history, deferred foreign keys, ledger
+constraints, append-only triggers, and runtime/backup ACL. A failure before image
+switching leaves the previous runtime running; successful additive DDL remains after an
+image rollback. Subsequent releases set both migration flags to `false` and leave both
+migration hashes empty.
 
 ## CRM custom roles migration
 
-The first compatible backend release applies the additive CRM Access migrations
-`20260921020000_add_crm_custom_member_role` and `20260921020100_crm_custom_roles`.
-Use `target=backend`, `crm_custom_roles_migration=true`, and provide the SHA-256 of
+The same compatible backend release applies the additive CRM Access migrations
+`20260921020000_add_crm_custom_member_role`, `20260921020100_crm_custom_roles`, and
+`20260921030100_crm_admin_seat_capacity`. Use the coupled flags described above and set
+`crm_custom_roles_migration_env_hash` to the SHA-256 of
 the private fixed file `/opt/aerocrm/env/migrations/crm-access.env`. The file is a
 regular non-symlink with mode 0600 and contains only `NODE_ENV=production` and the
 loopback migration-role `CRM_ACCESS_DATABASE_URL`. All three CRM Access runtime env
-files must still set `CRM_ACCESS_CUSTOM_ROLES_ENABLED=false`. Under `release.lock`,
-the helper checks the exact image and migration inventory, applies the two migrations,
-installs and verifies the catalog table/function ACL, and then permits the ordinary
-backend image switch. Future releases leave the migration flag false and hash empty.
-Enabling custom-role writes is a separate reviewed env release after every compatible
-reader and worker is running.
+files must still set `CRM_ACCESS_CUSTOM_ROLES_ENABLED=false`. Under `release.lock`, the
+helper checks the exact image and migration inventory, applies all three migrations,
+installs and verifies the catalog table/function ACL, and verifies the administrative
+seat command/fence constraints before the image switch. Enabling custom-role writes is a
+separate reviewed env release after every compatible reader and worker is running.
+
+Every backend switch also checks the candidate Billing and CRM Access image inventories.
+Before switching to an older incompatible image, the release stops Gateway and all
+Billing/CRM Access writers, then rejects the switch if CUSTOM data exists, an
+administrative-seat operation is unfinished, or any paid period has an administrative
+seat adjustment. Failed checks restart the exact containers stopped by the guard. If an
+automatic rollback is blocked, `releases/backend-rollback-blocked.pending` permits only a
+repeat of the same target SHA; a successful release clears it. Do not remove this marker
+or perform an image-only rollback to bypass the data checks.
 
 ## Android artifact
 

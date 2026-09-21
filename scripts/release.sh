@@ -15,7 +15,7 @@ crm_custom_roles_migration_env_hash=${7:-}
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 [[ "$billing_capacity_migration" == true || "$billing_capacity_migration" == false ]] || exit 64
 [[ "$crm_custom_roles_migration" == true || "$crm_custom_roles_migration" == false ]] || exit 64
-[[ "$billing_capacity_migration" != true || "$crm_custom_roles_migration" != true ]] || exit 64
+[[ "$billing_capacity_migration" == "$crm_custom_roles_migration" ]] || exit 64
 if [[ "$billing_capacity_migration" == true ]]; then
   [[ "$role" == backend && "$billing_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 else
@@ -30,6 +30,12 @@ cd /opt/aerocrm
 exec 9>release.lock
 flock -n 9 || { echo 'Another aeroCRM release is active' >&2; exit 1; }
 [[ ! -f releases/crm-contract-cutover.pending ]] || { echo 'CRM contract cutover pending; resume its guarded workflow before an ordinary release' >&2; exit 1; }
+rollback_pending=$(cat releases/backend-rollback-blocked.pending 2>/dev/null || true)
+[[ -z "$rollback_pending" || "$rollback_pending" =~ ^[a-f0-9]{40}$ ]] || exit 1
+if [[ -n "$rollback_pending" && ( "$role" != backend || "$sha" != "$rollback_pending" ) ]]; then
+  echo 'A blocked backend rollback must be recovered by repeating its exact target SHA' >&2
+  exit 1
+fi
 [[ -f "compose/$role.yml" && -d "env/$role" ]] || exit 1
 actual_env_hash=$(cd "env/$role" && find . -maxdepth 1 -type f -name '*.env' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
 [[ "$actual_env_hash" == "$expected_env_hash" ]] || { echo 'Environment hash mismatch' >&2; exit 1; }
@@ -49,21 +55,57 @@ for app in "${apps[@]}"; do
 done
 if [[ "$role" == frontend ]]; then
   sudo -n /usr/local/sbin/aerocrm-nginx-release check "$sha"
+else
+  node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
+  [[ -x "$node_bin" ]] || { echo 'Pinned backend release Node is unavailable' >&2; exit 1; }
+  "$node_bin" --check scripts/backend-rollback-compatibility-guard.mjs
 fi
 if [[ "$billing_capacity_migration" == true ]]; then
-  node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
-  [[ -x "$node_bin" ]] || { echo 'Pinned Billing migration Node is unavailable' >&2; exit 1; }
   "$node_bin" --check scripts/billing-capacity-migration.mjs
   "$node_bin" scripts/billing-capacity-migration.mjs "$sha" "$billing_migration_env_hash"
 fi
 if [[ "$crm_custom_roles_migration" == true ]]; then
-  node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
-  [[ -x "$node_bin" ]] || { echo 'Pinned CRM Access migration Node is unavailable' >&2; exit 1; }
   "$node_bin" --check scripts/crm-custom-roles-migration.mjs
   "$node_bin" scripts/crm-custom-roles-migration.mjs "$sha" "$crm_custom_roles_migration_env_hash"
 fi
 previous=$(cat "releases/$role.sha" 2>/dev/null || true)
 export IMAGE_SHA="$sha"
+backend_writers=(api-gateway billing-api billing-scheduler billing-worker billing-outbox-publisher crm-access-api crm-access-worker crm-access-outbox-publisher)
+guard_backend_candidate() {
+  local candidate="$1"
+  local guard_status=0
+  local writer_id
+  local writer_ids_output
+  local -a stopped_writer_ids=()
+  if "$node_bin" scripts/backend-rollback-compatibility-guard.mjs "$candidate"; then
+    return 0
+  else
+    guard_status=$?
+  fi
+  [[ "$guard_status" == 2 ]] || return "$guard_status"
+  writer_ids_output=$(docker compose -f compose/backend.yml ps -q "${backend_writers[@]}") || return 1
+  while IFS= read -r writer_id; do
+    [[ -z "$writer_id" ]] || stopped_writer_ids+=("$writer_id")
+  done <<< "$writer_ids_output"
+  for writer_id in "${stopped_writer_ids[@]}"; do
+    [[ "$writer_id" =~ ^[a-f0-9]{64}$ ]] || return 1
+  done
+  if ! docker compose -f compose/backend.yml stop -t 30 "${backend_writers[@]}"; then
+    ((${#stopped_writer_ids[@]} == 0)) || docker start "${stopped_writer_ids[@]}" >/dev/null ||
+      echo 'Compatible backend writers need operator recovery' >&2
+    return 1
+  fi
+  if "$node_bin" scripts/backend-rollback-compatibility-guard.mjs "$candidate" --writers-stopped; then
+    return 0
+  fi
+  ((${#stopped_writer_ids[@]} == 0)) || docker start "${stopped_writer_ids[@]}" >/dev/null ||
+    echo 'Compatible backend writers need operator recovery' >&2
+  return 1
+}
+if [[ "$role" == backend ]] && ! guard_backend_candidate "$sha"; then
+  echo 'Backend image switch blocked by incompatible persisted CRM data or an unverifiable guard' >&2
+  exit 1
+fi
 rollback() {
   local failure=$?
   trap - ERR
@@ -71,6 +113,12 @@ rollback() {
     sudo -n /usr/local/sbin/aerocrm-nginx-release rollback "$sha" || echo 'Nginx rollback needs operator recovery' >&2
   fi
   if [[ "$previous" =~ ^[a-f0-9]{40}$ ]]; then
+    if [[ "$role" == backend ]] && ! guard_backend_candidate "$previous"; then
+      printf '%s\n' "$sha" > releases/backend-rollback-blocked.pending.tmp
+      mv releases/backend-rollback-blocked.pending.tmp releases/backend-rollback-blocked.pending
+      echo 'Automatic backend rollback blocked; keeping compatible target writers' >&2
+      exit "$failure"
+    fi
     if IMAGE_SHA="$previous" docker compose -f "compose/$role.yml" up -d --remove-orphans; then
       printf '%s\n' "$previous" > "releases/$role.sha.tmp" && mv "releases/$role.sha.tmp" "releases/$role.sha"
     else
@@ -95,6 +143,9 @@ fi
 mkdir -p releases
 printf '%s\n' "$sha" > "releases/$role.sha.tmp"
 mv "releases/$role.sha.tmp" "releases/$role.sha"
+if [[ "$role" == backend ]]; then
+  rm -f releases/backend-rollback-blocked.pending
+fi
 if [[ "$role" == frontend ]]; then
   sudo -n /usr/local/sbin/aerocrm-nginx-release commit "$sha"
 fi
