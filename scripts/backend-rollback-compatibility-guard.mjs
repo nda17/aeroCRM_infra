@@ -9,6 +9,13 @@ const [candidateSha, mode] = process.argv.slice(2);
 const writersStopped = mode === '--writers-stopped';
 const billingEnvFile = '/opt/aerocrm/env/migrations/billing.env';
 const crmAccessEnvFile = '/opt/aerocrm/env/migrations/crm-access.env';
+const crmSalesEnvFile = '/opt/aerocrm/env/migrations/crm-sales.env';
+const commerceMigration = '20260923010000_sales_commerce';
+const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
+const commerceBusinessDataTables = [
+  'commerce_catalog_items', 'commerce_deal_lines', 'commerce_commands',
+  'commerce_events', 'commerce_quotes', 'commerce_payments'
+];
 
 function run(label, executable, args, options = {}) {
   try {
@@ -20,12 +27,25 @@ function run(label, executable, args, options = {}) {
     throw new Error(`${label} failed; private command output suppressed`);
   }
 }
-function imageCapabilities(image, migrations) {
-  return JSON.parse(run(`${image} compatibility inspection`, 'docker', [
+function imageCapabilities(image, migrations, expectedChecksums = {}, execute = run) {
+  return JSON.parse(execute(`${image} compatibility inspection`, 'docker', [
     'run', '--rm', '--network', 'none', '--entrypoint', 'node', image, '-e',
-    `const fs=require('node:fs'),root='/app/prisma/migrations';
-     console.log(JSON.stringify(${JSON.stringify(migrations)}.map(name=>fs.existsSync(root+'/'+name+'/migration.sql'))));`
+    `const fs=require('node:fs'),crypto=require('node:crypto'),root='/app/prisma/migrations';
+     const expected=${JSON.stringify(expectedChecksums)};
+     console.log(JSON.stringify(${JSON.stringify(migrations)}.map(name=>{
+       const file=root+'/'+name+'/migration.sql';
+       return fs.existsSync(file) && (!expected[name] ||
+         crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')===expected[name]);
+     })));`
   ]));
+}
+function commerceBusinessDataQuery() {
+  return `SELECT json_build_object('businessWrites', ${commerceBusinessDataTables
+    .map(table => `EXISTS (SELECT 1 FROM crm_sales.${table})`).join(' OR ')})::text;`;
+}
+function assertNoCommerceBusinessWrites(state) {
+  assert.equal(state.businessWrites, false,
+    'Candidate CRM Sales image cannot read persisted commerce data');
 }
 function readDatabaseUrl(file, key, identity) {
   const stat = fs.lstatSync(file);
@@ -58,6 +78,26 @@ function inspectDatabase(identity, query) {
   ], { env: { ...process.env, PGPASSWORD: identity.password } }));
 }
 
+if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
+  let probe;
+  const capabilities = imageCapabilities('aerocrm/crm-sales:fixture', [commerceMigration],
+    { [commerceMigration]: commerceChecksum }, (_label, executable, args) => {
+      probe = { executable, args };
+      return '[true]';
+    });
+  assert.deepEqual(capabilities, [true]);
+  assert.equal(probe.executable, 'docker');
+  assert(probe.args.includes('none') && probe.args.at(-1).includes(commerceChecksum));
+  const query = commerceBusinessDataQuery();
+  for (const table of commerceBusinessDataTables) assert(query.includes(`crm_sales.${table}`));
+  assert(!query.includes('commerce_import_previews'));
+  assertNoCommerceBusinessWrites({ businessWrites: false });
+  assert.throws(() => assertNoCommerceBusinessWrites({ businessWrites: true }),
+    /cannot read persisted commerce data/);
+  console.log('Backend commerce rollback policy fixtures verified');
+  process.exit(0);
+}
+
 assert.equal(process.platform, 'linux', 'Backend compatibility guard must run on Linux host');
 assert.equal(fs.realpathSync('.'), '/opt/aerocrm', 'Run from /opt/aerocrm');
 assert([3, 4].includes(process.argv.length) && (!mode || writersStopped),
@@ -72,13 +112,17 @@ const crmCapabilities = imageCapabilities(`aerocrm/crm-access:${candidateSha}`, 
 const billingCapabilities = imageCapabilities(`aerocrm/billing:${candidateSha}`, [
   '20260921030000_crm_admin_seat_adjustments'
 ]);
+const salesCapabilities = imageCapabilities(`aerocrm/crm-sales:${candidateSha}`, [commerceMigration], {
+  [commerceMigration]: commerceChecksum
+});
 assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
-  [...crmCapabilities, ...billingCapabilities].every(value => typeof value === 'boolean'),
+  salesCapabilities.length === 1 &&
+  [...crmCapabilities, ...billingCapabilities, ...salesCapabilities].every(value => typeof value === 'boolean'),
   'Candidate image compatibility inventory is invalid');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
-if (customRolesCompatible && adminSeatsCompatible) {
-  console.log('Candidate backend images support custom roles and administrative seat adjustments');
+if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0]) {
+  console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
@@ -115,5 +159,18 @@ if (!billingCapabilities[0]) {
       SELECT 1 FROM billing.crm_admin_seat_adjustments WHERE target='PAID_PERIOD'))::text;`);
   assert.equal(billingState.paidPeriodAdjustment, false,
     'Candidate Billing image cannot protect an administratively adjusted paid period');
+}
+if (!salesCapabilities[0]) {
+  const crmSales = readDatabaseUrl(crmSalesEnvFile, 'CRM_SALES_DATABASE_URL', {
+    database: 'aerocrm_crm_sales', role: 'aerocrm_crm_sales_migration', schema: 'crm_sales'
+  });
+  const commerceApplied = inspectDatabase(crmSales, `SELECT EXISTS (
+    SELECT 1 FROM crm_sales._prisma_migrations
+    WHERE migration_name='${commerceMigration}' AND finished_at IS NOT NULL
+      AND rolled_back_at IS NULL)::text;`);
+  if (commerceApplied) {
+    const salesState = inspectDatabase(crmSales, commerceBusinessDataQuery());
+    assertNoCommerceBusinessWrites(salesState);
+  }
 }
 console.log('Persisted CRM data is compatible with the candidate backend images');

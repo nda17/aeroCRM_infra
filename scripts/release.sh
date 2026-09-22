@@ -9,12 +9,15 @@ billing_capacity_migration=${4:-false}
 billing_migration_env_hash=${5:-}
 crm_custom_roles_migration=${6:-false}
 crm_custom_roles_migration_env_hash=${7:-}
-[[ $# -le 7 ]] || exit 64
+crm_sales_commerce_migration=${8:-false}
+crm_sales_commerce_migration_env_hash=${9:-}
+[[ $# -le 9 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 [[ "$billing_capacity_migration" == true || "$billing_capacity_migration" == false ]] || exit 64
 [[ "$crm_custom_roles_migration" == true || "$crm_custom_roles_migration" == false ]] || exit 64
+[[ "$crm_sales_commerce_migration" == true || "$crm_sales_commerce_migration" == false ]] || exit 64
 [[ "$billing_capacity_migration" == "$crm_custom_roles_migration" ]] || exit 64
 if [[ "$billing_capacity_migration" == true ]]; then
   [[ "$role" == backend && "$billing_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -25,6 +28,11 @@ if [[ "$crm_custom_roles_migration" == true ]]; then
   [[ "$role" == backend && "$crm_custom_roles_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 else
   [[ -z "$crm_custom_roles_migration_env_hash" ]] || exit 64
+fi
+if [[ "$crm_sales_commerce_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_sales_commerce_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
+else
+  [[ -z "$crm_sales_commerce_migration_env_hash" ]] || exit 64
 fi
 cd /opt/aerocrm
 exec 9>release.lock
@@ -68,9 +76,13 @@ if [[ "$crm_custom_roles_migration" == true ]]; then
   "$node_bin" --check scripts/crm-custom-roles-migration.mjs
   "$node_bin" scripts/crm-custom-roles-migration.mjs "$sha" "$crm_custom_roles_migration_env_hash"
 fi
+if [[ "$crm_sales_commerce_migration" == true ]]; then
+  "$node_bin" --check scripts/crm-sales-commerce-migration.mjs
+  "$node_bin" scripts/crm-sales-commerce-migration.mjs "$sha" "$crm_sales_commerce_migration_env_hash"
+fi
 previous=$(cat "releases/$role.sha" 2>/dev/null || true)
 export IMAGE_SHA="$sha"
-backend_writers=(api-gateway billing-api billing-scheduler billing-worker billing-outbox-publisher crm-access-api crm-access-worker crm-access-outbox-publisher)
+backend_writers=(api-gateway billing-api billing-scheduler billing-worker billing-outbox-publisher crm-access-api crm-access-worker crm-access-outbox-publisher crm-sales-api crm-sales-reminders)
 guard_backend_candidate() {
   local candidate="$1"
   local guard_status=0

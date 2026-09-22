@@ -85,6 +85,37 @@ automatic rollback is blocked, `releases/backend-rollback-blocked.pending` permi
 repeat of the same target SHA; a successful release clears it. Do not remove this marker
 or perform an image-only rollback to bypass the data checks.
 
+## CRM Sales commerce migration
+
+The first compatible backend release uses `target=backend` and
+`crm_sales_commerce_migration=true`, independently of the historical Billing/CRM Access
+migration flags. Set `crm_sales_commerce_migration_env_hash` to the SHA-256 of the fixed
+private VPS file `/opt/aerocrm/env/migrations/crm-sales.env`. The file must be regular,
+non-symlinked, mode 0600, and contain only `NODE_ENV=production` and the loopback
+`CRM_SALES_DATABASE_URL` for the `aerocrm_crm_sales_migration` role, `aerocrm_crm_sales`
+database and `crm_sales` schema. The release checks the exact image revision, pinned
+service-owned migration and ACL inventories, applies Prisma migrations and new-object
+ACL under `release.lock`, and verifies the schema before switching images. Subsequent
+releases set the flag to `false` and leave its migration hash empty.
+
+Release order: verify the current service-owned S3 backups and the private migration
+env hash, run the green exact-SHA backend release with the commerce migration flag,
+confirm the applied CRM Sales migration and all backend readiness checks, then run a
+separate frontend release of the same approved application SHA. The frontend must
+not expose the new controls before the compatible backend is ready. The new schema
+is additive and remains after an image rollback; keep that schema in place and use
+the guarded release path for any recovery.
+
+The backend compatibility guard also checks the candidate CRM Sales image. When it
+lacks the commerce migration, the release first stops Gateway and CRM Sales writers
+alongside the existing Billing/CRM Access writers, then rejects the image if commerce
+business data exists. A preview without applied changes does not bar rollback. A
+blocked automatic rollback leaves the existing recovery marker and requires a
+commerce-aware target SHA; an image-only rollback is unsafe once commerce data exists.
+The verified S3 backups remain recovery evidence, but automatic S3 restore is still
+disabled and requires the separate PostgreSQL 18 restore admission work described
+in the project backlog.
+
 ## Android artifact
 
 Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.
