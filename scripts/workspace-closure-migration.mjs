@@ -8,6 +8,14 @@ import { parseEnv } from 'node:util';
 
 const owners = ['billing', 'crm-access', 'crm-customers', 'crm-intake', 'crm-sales', 'identity', 'notification-delivery'];
 const migrationName = '20260923030000_workspace_closure';
+const resolvedCrmAccessBaselineAttempt = Object.freeze({
+  migration_name: '20260920000000_init_aerocrm',
+  checksum: '2a7fdd85882cc55b6893d2024f920788c1ea03e1d8497ad218770558ebce0793',
+  started_at_utc: '2026-09-19T22:05:46.748634Z',
+  finished_at_utc: null,
+  rolled_back_at_utc: '2026-09-19T22:07:20.080831Z',
+  applied_steps_count: 0
+});
 const inventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure-reviewed-inventory.json', import.meta.url)));
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const literal = value => `'${value.replaceAll("'", "''")}'`;
@@ -66,16 +74,27 @@ function sql(owner, query) {
   ], { env: { ...process.env, PGPASSWORD: owner.password } });
 }
 function migrationRows(owner) {
-  return inspect(owner, `SELECT COALESCE(json_agg(row_to_json(m) ORDER BY m.migration_name), '[]'::json)::text
+  return inspect(owner, `SELECT COALESCE(json_agg(row_to_json(m) ORDER BY m.migration_name, m.started_at_utc), '[]'::json)::text
     FROM (SELECT migration_name, checksum, finished_at IS NOT NULL AS finished,
-      rolled_back_at IS NOT NULL AS rolled_back FROM ${ident(owner.schema)}._prisma_migrations) m;`);
+      rolled_back_at IS NOT NULL AS rolled_back,
+      to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS started_at_utc,
+      to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS finished_at_utc,
+      to_char(rolled_back_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS rolled_back_at_utc,
+      applied_steps_count FROM ${ident(owner.schema)}._prisma_migrations) m;`);
+}
+function isResolvedCrmAccessBaselineAttempt(owner, row) {
+  return owner.service === 'crm-access' &&
+    Object.entries(resolvedCrmAccessBaselineAttempt).every(([key, value]) => row[key] === value);
 }
 function verifyRows(owner, rows, complete) {
+  const resolved = rows.filter(row => isResolvedCrmAccessBaselineAttempt(owner, row));
+  assert(resolved.length <= 1, 'Unexpected duplicate resolved CRM Access baseline attempt');
+  const active = rows.filter(row => !isResolvedCrmAccessBaselineAttempt(owner, row));
   const expected = Object.entries(inventory.owners[owner.service].migrations);
   const allowed = complete ? expected : expected.slice(0, -1);
-  assert.deepEqual(rows.map(row => row.migration_name), allowed.map(([name]) => name),
+  assert.deepEqual(active.map(row => row.migration_name), allowed.map(([name]) => name),
     `Unexpected migration history: ${owner.service}`);
-  for (const [index, row] of rows.entries()) {
+  for (const [index, row] of active.entries()) {
     assert.equal(row.checksum, allowed[index][1], `Migration checksum mismatch: ${owner.service}/${row.migration_name}`);
     assert(row.finished === true && row.rolled_back === false, `Incomplete migration: ${owner.service}/${row.migration_name}`);
   }
@@ -184,6 +203,24 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     verifyRows(owner, rows, true);
     verifyRows(owner, rows.slice(0, -1), false);
     assert.throws(() => verifyRows(owner, [{ ...rows[0], checksum: '0'.repeat(64) }], false));
+    assert.throws(() => verifyRows(owner, [{ ...rows[0], finished: false, rolled_back: true }, ...rows.slice(1)], true));
+    if (service === 'crm-access') {
+      verifyRows(owner, [resolvedCrmAccessBaselineAttempt, ...rows], true);
+      verifyRows(owner, [resolvedCrmAccessBaselineAttempt, ...rows.slice(0, -1)], false);
+      assert.throws(() => verifyRows(owner, [resolvedCrmAccessBaselineAttempt, resolvedCrmAccessBaselineAttempt, ...rows], true),
+        /Unexpected duplicate resolved CRM Access baseline attempt/);
+      for (const changed of [
+        { checksum: '0'.repeat(64) },
+        { started_at_utc: '2026-09-19T22:05:46.748635Z' },
+        { rolled_back_at_utc: null },
+        { applied_steps_count: 1 }
+      ])
+        assert.throws(() => verifyRows(owner, [{ ...resolvedCrmAccessBaselineAttempt, ...changed }, ...rows], true),
+          /Unexpected migration history/);
+    } else {
+      assert.throws(() => verifyRows(owner, [resolvedCrmAccessBaselineAttempt, ...rows], true),
+        /Unexpected migration history/);
+    }
   }
   console.log('Workspace closure migration policy fixtures verified');
   process.exit(0);
