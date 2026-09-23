@@ -5,8 +5,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { parseEnv } from 'node:util';
 
-const [candidateSha, mode] = process.argv.slice(2);
-const writersStopped = mode === '--writers-stopped';
+const [candidateSha, ...modes] = process.argv.slice(2);
+const writersStopped = modes.includes('--writers-stopped');
+const closureEnabled = modes.includes('--closure-enabled');
 const billingEnvFile = '/opt/aerocrm/env/migrations/billing.env';
 const crmAccessEnvFile = '/opt/aerocrm/env/migrations/crm-access.env';
 const crmSalesEnvFile = '/opt/aerocrm/env/migrations/crm-sales.env';
@@ -41,6 +42,25 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
          crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')===expected[name]);
      })));`
   ]));
+}
+function closureImageReviewed(service, sha, execute = run) {
+  const expected = closureInventory.owners[service];
+  const image = `aerocrm/${service}:${sha}`;
+  const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
+    '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
+  if (revision !== sha) return false;
+  const result = JSON.parse(execute(`${service} closure inventory`, 'docker', [
+    'run', '--rm', '--network', 'none', '--entrypoint', 'node', image, '-e',
+    `const fs=require('node:fs'),crypto=require('node:crypto'),root='/app/prisma';
+     const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
+     const expected=${JSON.stringify(expected.migrations)};
+     const names=fs.readdirSync(root+'/migrations',{withFileTypes:true})
+       .filter(entry=>entry.isDirectory()).map(entry=>entry.name).sort();
+     const verified=names.length===Object.keys(expected).length && names.every(name=>
+       expected[name]===hash(fs.readFileSync(root+'/migrations/'+name+'/migration.sql')));
+     console.log(JSON.stringify({migrations:verified,aclSha:hash(fs.readFileSync(root+'/database-access.json'))}));`
+  ]));
+  return result.migrations === true && result.aclSha === expected.aclSha256;
 }
 function commerceBusinessDataQuery() {
   return `SELECT json_build_object('businessWrites', ${commerceBusinessDataTables
@@ -94,6 +114,19 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   const query = commerceBusinessDataQuery();
   for (const table of commerceBusinessDataTables) assert(query.includes(`crm_sales.${table}`));
   assert(!query.includes('commerce_import_previews'));
+  let calls = 0;
+  assert(closureImageReviewed('identity', 'a'.repeat(40), (_label, executable, args) => {
+    calls++;
+    assert.equal(executable, 'docker');
+    if (calls === 1) return 'a'.repeat(40);
+    assert(args.includes('none'));
+    assert(args.at(-1).includes(closureInventory.owners.identity.aclSha256) === false);
+    return JSON.stringify({ migrations: true, aclSha: closureInventory.owners.identity.aclSha256 });
+  }));
+  assert.equal(calls, 2);
+  assert.equal(closureImageReviewed('identity', 'a'.repeat(40), (_label, _executable, args) =>
+    args[0] === 'image' ? 'a'.repeat(40) : JSON.stringify({ migrations: false,
+      aclSha: closureInventory.owners.identity.aclSha256 })), false);
   assertNoCommerceBusinessWrites({ businessWrites: false });
   assert.throws(() => assertNoCommerceBusinessWrites({ businessWrites: true }),
     /cannot read persisted commerce data/);
@@ -103,9 +136,16 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
 
 assert.equal(process.platform, 'linux', 'Backend compatibility guard must run on Linux host');
 assert.equal(fs.realpathSync('.'), '/opt/aerocrm', 'Run from /opt/aerocrm');
-assert([3, 4].includes(process.argv.length) && (!mode || writersStopped),
-  'Expected candidate exact SHA and optional --writers-stopped');
+assert(modes.length <= 2 && new Set(modes).size === modes.length &&
+  modes.every(mode => ['--writers-stopped', '--closure-enabled'].includes(mode)),
+  'Expected candidate exact SHA and optional compatibility modes');
 assert(/^[a-f0-9]{40}$/.test(candidateSha), 'Candidate exact SHA required');
+
+if (closureEnabled) {
+  for (const service of closureOwners)
+    assert(closureImageReviewed(service, candidateSha),
+      `Candidate ${service} image does not match reviewed workspace closure migrations and ACL`);
+}
 
 const closureCapabilities = closureOwners.map(service => imageCapabilities(
   `aerocrm/${service}:${candidateSha}`, [closureMigration],

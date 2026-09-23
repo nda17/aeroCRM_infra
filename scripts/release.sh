@@ -2,6 +2,34 @@
 set -euo pipefail
 
 # Run on the target VPS from /opt/aerocrm after CI has loaded every exact-SHA image.
+closure_marker_mode() {
+  local compatible="$1" backend="$2" enabled="$3" candidate="$4" pending="$5"
+  [[ "$compatible" =~ ^[a-f0-9]{40}$ && "$backend" =~ ^[a-f0-9]{40}$ &&
+    ( -z "$pending" || "$pending" == "$candidate" ) ]] || return 1
+  if [[ "$backend" == "$candidate" && "$compatible" == "$candidate" &&
+    ( -z "$enabled" || "$enabled" == "$candidate" ) ]]; then
+    printf 'initial\n'
+    return 0
+  fi
+  if [[ "$enabled" =~ ^[a-f0-9]{40}$ && "$backend" == "$enabled" ]]; then
+    printf 'upgrade\n'
+    return 0
+  fi
+  return 1
+}
+if [[ "${1:-}" == --policy-self-test ]]; then
+  old=$(printf 'a%.0s' {1..40})
+  new=$(printf 'b%.0s' {1..40})
+  [[ "$(closure_marker_mode "$old" "$old" '' "$old" '')" == initial ]]
+  [[ "$(closure_marker_mode "$old" "$old" "$old" "$new" '')" == upgrade ]]
+  [[ "$(closure_marker_mode "$old" "$new" "$new" "$new" '')" == upgrade ]]
+  [[ "$(closure_marker_mode "$old" "$old" "$old" "$new" "$new")" == upgrade ]]
+  if closure_marker_mode "$old" "$old" "$old" "$new" "$old" >/dev/null; then exit 1; fi
+  if closure_marker_mode "$old" "$new" "$old" "$new" '' >/dev/null; then exit 1; fi
+  if closure_marker_mode '' "$old" "$old" "$new" '' >/dev/null; then exit 1; fi
+  echo 'Closure release marker policy fixtures verified'
+  exit 0
+fi
 role=${1:?frontend or backend required}
 sha=${2:?exact commit SHA required}
 expected_env_hash=${3:?env hash required}
@@ -15,7 +43,9 @@ crm_intake_notifications_migration=${10:-false}
 crm_intake_notifications_migration_env_hash=${11:-}
 workspace_closure_migration=${12:-false}
 workspace_closure_migration_env_hash=${13:-}
-[[ $# -le 13 ]] || exit 64
+workspace_closure_identity_acl_repair=${14:-false}
+workspace_closure_identity_env_hash=${15:-}
+[[ $# -le 15 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -24,6 +54,7 @@ workspace_closure_migration_env_hash=${13:-}
 [[ "$crm_sales_commerce_migration" == true || "$crm_sales_commerce_migration" == false ]] || exit 64
 [[ "$crm_intake_notifications_migration" == true || "$crm_intake_notifications_migration" == false ]] || exit 64
 [[ "$workspace_closure_migration" == true || "$workspace_closure_migration" == false ]] || exit 64
+[[ "$workspace_closure_identity_acl_repair" == true || "$workspace_closure_identity_acl_repair" == false ]] || exit 64
 [[ "$billing_capacity_migration" == "$crm_custom_roles_migration" ]] || exit 64
 if [[ "$billing_capacity_migration" == true ]]; then
   [[ "$role" == backend && "$billing_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -51,6 +82,14 @@ if [[ "$workspace_closure_migration" == true ]]; then
     "$workspace_closure_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 else
   [[ -z "$workspace_closure_migration_env_hash" ]] || exit 64
+fi
+if [[ "$workspace_closure_identity_acl_repair" == true ]]; then
+  [[ "$role" == backend && "$billing_capacity_migration" == false &&
+    "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
+    "$workspace_closure_migration" == false &&
+    "$workspace_closure_identity_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
+else
+  [[ -z "$workspace_closure_identity_env_hash" ]] || exit 64
 fi
 cd /opt/aerocrm
 exec 9>release.lock
@@ -91,12 +130,18 @@ if [[ "$role" == backend ]]; then
     echo 'CRM Access closure gate differs across process roles' >&2; exit 1;
   }
   [[ "$closure_gate_count" == 0 ]] || closure_gate=true
+  if [[ "$workspace_closure_identity_acl_repair" == true && "$closure_gate" != true ]]; then
+    echo 'Identity workspace ACL repair requires the closure gate enabled' >&2; exit 1
+  fi
   if [[ "$workspace_closure_migration" == true ]]; then
     [[ "$closure_gate" == false ]] || { echo 'Closure gate must be OFF during schema migration' >&2; exit 1; }
   elif [[ "$closure_gate" == true ]]; then
-    [[ "$(cat releases/workspace-closure-compatible.sha 2>/dev/null || true)" == "$sha" &&
-      "$(cat releases/backend.sha 2>/dev/null || true)" == "$sha" ]] || {
-      echo 'Closure gate requires a preceding exact-SHA compatible backend rollout' >&2; exit 1;
+    closure_compatible_sha=$(cat releases/workspace-closure-compatible.sha 2>/dev/null || true)
+    closure_backend_sha=$(cat releases/backend.sha 2>/dev/null || true)
+    closure_enabled_sha=$(cat releases/workspace-closure-enabled.sha 2>/dev/null || true)
+    marker_mode=$(closure_marker_mode "$closure_compatible_sha" "$closure_backend_sha" \
+      "$closure_enabled_sha" "$sha" "$rollback_pending") || {
+      echo 'Closure markers do not permit this backend release' >&2; exit 1;
     }
   fi
 fi
@@ -132,6 +177,9 @@ if [[ "$workspace_closure_migration" == true ]]; then
   "$node_bin" --check scripts/workspace-closure-migration.mjs
   "$node_bin" scripts/workspace-closure-migration.mjs "$sha" "$workspace_closure_migration_env_hash"
 fi
+if [[ "$workspace_closure_identity_acl_repair" == true ]]; then
+  "$node_bin" --check scripts/workspace-closure-migration.mjs
+fi
 previous=$(cat "releases/$role.sha" 2>/dev/null || true)
 export IMAGE_SHA="$sha"
 backend_writers=(api-gateway notification-delivery-worker campaigns-service reporting-service
@@ -147,7 +195,9 @@ guard_backend_candidate() {
   local writer_id
   local writer_ids_output
   local -a stopped_writer_ids=()
-  if "$node_bin" scripts/backend-rollback-compatibility-guard.mjs "$candidate"; then
+  local -a closure_mode=()
+  [[ "$closure_gate" != true ]] || closure_mode=(--closure-enabled)
+  if "$node_bin" scripts/backend-rollback-compatibility-guard.mjs "$candidate" "${closure_mode[@]}"; then
     return 0
   else
     guard_status=$?
@@ -165,7 +215,7 @@ guard_backend_candidate() {
       echo 'Compatible backend writers need operator recovery' >&2
     return 1
   fi
-  if "$node_bin" scripts/backend-rollback-compatibility-guard.mjs "$candidate" --writers-stopped; then
+  if "$node_bin" scripts/backend-rollback-compatibility-guard.mjs "$candidate" --writers-stopped "${closure_mode[@]}"; then
     return 0
   fi
   ((${#stopped_writer_ids[@]} == 0)) || docker start "${stopped_writer_ids[@]}" >/dev/null ||
@@ -176,8 +226,12 @@ if [[ "$role" == backend ]] && ! guard_backend_candidate "$sha"; then
   echo 'Backend image switch blocked by incompatible persisted CRM data or an unverifiable guard' >&2
   exit 1
 fi
+if [[ "$workspace_closure_identity_acl_repair" == true ]]; then
+  "$node_bin" scripts/workspace-closure-migration.mjs --repair-identity-workspace-acl \
+    "$sha" "$workspace_closure_identity_env_hash"
+fi
 rollback() {
-  local failure=$?
+  local failure=${1:-$?}
   trap - ERR
   if [[ "$role" == frontend ]]; then
     sudo -n /usr/local/sbin/aerocrm-nginx-release rollback "$sha" || echo 'Nginx rollback needs operator recovery' >&2
@@ -220,7 +274,7 @@ else
       -o /dev/null -w '%{http_code}' \
       'http://127.0.0.1:5300/api/v1/crm/access/workspace-closures')
     [[ "$access_status" == 401 || "$access_status" == 403 ]] || {
-      echo 'CRM Access closure capability endpoint unavailable' >&2; exit 1;
+      echo 'CRM Access closure capability endpoint unavailable' >&2; rollback 1;
     }
     for port in 4900 4800 5320 5330 5310 4401; do
       status=$(curl --silent --show-error --connect-timeout 2 --max-time 5 \
@@ -228,7 +282,7 @@ else
         -H 'x-aerocrm-service: crm-access' --data '{}' \
         "http://127.0.0.1:$port/internal/v1/workspace-closures/fence")
       [[ "$status" == 401 || "$status" == 403 ]] || {
-        echo "Closure capability endpoint unavailable on port $port" >&2; exit 1;
+        echo "Closure capability endpoint unavailable on port $port" >&2; rollback 1;
       }
     done
   fi

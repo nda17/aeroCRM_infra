@@ -163,6 +163,20 @@ recreates the three CRM Access roles, verifies their live gate and records
 marker. `target=all` and parallel frontend/backend releases are forbidden. Do not
 rerun the historical CRM contract cutover or its previous migration flags.
 
+For a later backend SHA while the closure gate is on, use a green exact-SHA CI
+release with all migration and enable flags false. The release keeps the initial
+`workspace-closure-compatible.sha` as the schema anchor and verifies every new
+and rollback candidate image against the reviewed migrations and ACL for all
+seven participants. If the Identity runtime still lacks the manifest's
+`UPDATE` grant on `identity.workspaces`, select
+`workspace_closure_identity_acl_repair=true` and provide
+`workspace_closure_identity_env_hash` as the SHA-256 of the existing private
+`env/migrations/identity.env` file. This GitHub release step checks the exact
+image, migration history, database owner, ACL and closure triggers, grants only
+that table privilege, then verifies the ACL before switching images. It is safe
+to repeat with the same reviewed SHA. Mismatched release markers remain blocked
+for operator review.
+
 The guarded rollback stops all non-profile backend writers and consumers and
 checks all seven databases before allowing images without closure enforcement.
 Once a closure fence or operation exists, retain the additive schema and fence;

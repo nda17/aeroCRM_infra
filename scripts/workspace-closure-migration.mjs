@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Target host only, under release.lock, before any closure-aware backend image is started.
+// Target host only, under release.lock. The repair mode runs before a closure-enabled image switch.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -188,6 +188,71 @@ function applyClosureAcl(owner, acl) {
     `Closure triggers missing or disabled: ${owner.service}`);
 }
 
+function repairIdentityWorkspaceAcl(sha, expectedIdentityEnvHash, deps = {}) {
+  assert.equal(inventory.schemaVersion, 1, 'Reviewed closure inventory version differs');
+  assert(/^[a-f0-9]{40}$/.test(sha) && /^[a-f0-9]{64}$/.test(expectedIdentityEnvHash),
+    'Exact SHA and Identity migration env hash required');
+  const owner = (deps.privateIdentity || privateIdentity)('identity');
+  assert.equal(sha256(owner.bytes), expectedIdentityEnvHash, 'Identity migration env hash mismatch');
+  const acl = (deps.imageInventory || imageInventory)(owner, sha);
+  (deps.verifyRows || verifyRows)(owner, (deps.migrationRows || migrationRows)(owner), true);
+  assert.deepEqual(acl.tables.workspaces, ['SELECT', 'INSERT', 'UPDATE'],
+    'Reviewed Identity workspace ACL differs');
+  assert(!acl.columnPrivileges?.workspaces, 'Unexpected Identity workspace column grants');
+  const stateQuery = `SELECT json_build_object(
+    'schemaOwner', (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname='identity'),
+    'tableOwner', (SELECT pg_get_userbyid(c.relowner) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='identity' AND c.relname='workspaces' AND c.relkind='r'),
+    'closureTriggers', (SELECT COUNT(*)=3 FROM pg_trigger tg
+      JOIN pg_class c ON c.oid=tg.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+      JOIN pg_proc p ON p.oid=tg.tgfoid
+      WHERE n.nspname='identity' AND tg.tgenabled='O' AND p.prosecdef AND
+        ((c.relname='workspaces' AND tg.tgname='workspace_closure_reactivation_guard' AND
+            p.proname='guard_workspace_reactivation') OR
+         (c.relname='workspace_members' AND tg.tgname='workspace_closure_member_guard' AND
+            p.proname='guard_workspace_admission') OR
+         (c.relname='workspace_invitations' AND tg.tgname='workspace_closure_invitation_guard' AND
+            p.proname='guard_workspace_admission')) AND
+        pg_get_userbyid(p.proowner)='aerocrm_identity_migration'),
+    'runtimeSelect', has_table_privilege('aerocrm_identity_runtime','identity.workspaces','SELECT'),
+    'runtimeInsert', has_table_privilege('aerocrm_identity_runtime','identity.workspaces','INSERT'),
+    'runtimeUpdate', has_table_privilege('aerocrm_identity_runtime','identity.workspaces','UPDATE'),
+    'runtimeForbidden', has_table_privilege('aerocrm_identity_runtime','identity.workspaces',
+      'DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'),
+    'publicPrivileges', EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,
+      LATERAL aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a
+      WHERE n.nspname='identity' AND c.relname='workspaces' AND a.grantee=0),
+    'backupSelect', has_table_privilege('aerocrm_identity_backup','identity.workspaces','SELECT'),
+    'backupForbidden', has_table_privilege('aerocrm_identity_backup','identity.workspaces',
+      'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'))::text;`;
+  const before = (deps.inspect || inspect)(owner, stateQuery);
+  assert(before.schemaOwner === owner.role && before.tableOwner === owner.role &&
+    before.closureTriggers === true &&
+    before.runtimeSelect === true && before.runtimeInsert === true &&
+    before.runtimeForbidden === false && before.publicPrivileges === false &&
+    before.backupSelect === true &&
+    before.backupForbidden === false, 'Identity workspace ACL baseline differs');
+  (deps.sql || sql)(owner, `BEGIN;
+    SET LOCAL lock_timeout='5s';
+    SET LOCAL statement_timeout='30s';
+    DO $guard$ BEGIN
+      IF current_database() <> 'aerocrm_identity' OR current_user <> 'aerocrm_identity_migration'
+        OR (SELECT pg_get_userbyid(c.relowner) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname='identity' AND c.relname='workspaces' AND c.relkind='r') <> current_user
+      THEN RAISE EXCEPTION 'Identity workspace ACL target changed'; END IF;
+    END $guard$;
+    GRANT UPDATE ON TABLE identity.workspaces TO aerocrm_identity_runtime;
+    DO $verify$ BEGIN
+      IF NOT has_table_privilege('aerocrm_identity_runtime','identity.workspaces','UPDATE')
+      THEN RAISE EXCEPTION 'Identity workspace UPDATE grant failed'; END IF;
+    END $verify$;
+    COMMIT;`);
+  const after = (deps.inspect || inspect)(owner, stateQuery);
+  assert.deepEqual(after, { ...before, runtimeUpdate: true },
+    'Identity workspace ACL repair postflight differs');
+  return true;
+}
+
 if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(inventory.schemaVersion, 1);
   assert.deepEqual(Object.keys(inventory.owners).sort(), owners);
@@ -222,12 +287,61 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
         /Unexpected migration history/);
     }
   }
+  const fixtureBytes = Buffer.from('identity-closure-acl-policy');
+  const fixtureSha = 'a'.repeat(40);
+  const fixtureHash = sha256(fixtureBytes);
+  const fixtureRows = Object.entries(inventory.owners.identity.migrations).map(([migration_name, checksum]) =>
+    ({ migration_name, checksum, finished: true, rolled_back: false }));
+  const fixtureState = { schemaOwner: 'aerocrm_identity_migration',
+    tableOwner: 'aerocrm_identity_migration', closureTriggers: true,
+    runtimeSelect: true, runtimeInsert: true, runtimeUpdate: false,
+    runtimeForbidden: false, publicPrivileges: false,
+    backupSelect: true, backupForbidden: false };
+  function repairFixture(changes = {}) {
+    const statements = [];
+    let reads = 0;
+    const options = {
+      privateIdentity: () => ({ service: 'identity', role: 'aerocrm_identity_migration', bytes: fixtureBytes }),
+      imageInventory: () => changes.acl || { tables: { workspaces: ['SELECT', 'INSERT', 'UPDATE'] } },
+      migrationRows: () => changes.rows || fixtureRows,
+      inspect: () => reads++ === 0 ? (changes.state || fixtureState) :
+        { ...(changes.state || fixtureState), runtimeUpdate: true },
+      sql: (_owner, statement) => statements.push(statement)
+    };
+    return { options, statements };
+  }
+  const first = repairFixture();
+  assert(repairIdentityWorkspaceAcl(fixtureSha, fixtureHash, first.options));
+  assert.equal(first.statements.length, 1);
+  assert.equal((first.statements[0].match(/\bGRANT\b/g) || []).length, 1);
+  assert(first.statements[0].includes('GRANT UPDATE ON TABLE identity.workspaces TO aerocrm_identity_runtime'));
+  assert(!/\b(?:CREATE|ALTER|DROP|REVOKE)\b/.test(first.statements[0]));
+  const repeated = repairFixture({ state: { ...fixtureState, runtimeUpdate: true } });
+  assert(repairIdentityWorkspaceAcl(fixtureSha, fixtureHash, repeated.options));
+  assert.equal(repeated.statements.length, 1);
+  for (const [hash, changes] of [
+    ['0'.repeat(64), {}],
+    [fixtureHash, { acl: { tables: { workspaces: ['SELECT', 'INSERT'] } } }],
+    [fixtureHash, { rows: fixtureRows.slice(0, -1) }],
+    [fixtureHash, { state: { ...fixtureState, closureTriggers: false } }],
+    [fixtureHash, { state: { ...fixtureState, publicPrivileges: true } }]
+  ]) {
+    const fixture = repairFixture(changes);
+    assert.throws(() => repairIdentityWorkspaceAcl(fixtureSha, hash, fixture.options));
+    assert.equal(fixture.statements.length, 0);
+  }
   console.log('Workspace closure migration policy fixtures verified');
   process.exit(0);
 }
 
 assert.equal(process.platform, 'linux', 'Closure migration must run on Linux host');
 assert.equal(fs.realpathSync('.'), '/opt/aerocrm', 'Run from /opt/aerocrm');
+if (process.argv[2] === '--repair-identity-workspace-acl') {
+  assert.equal(process.argv.length, 5, 'Expected exact SHA and Identity migration env hash');
+  repairIdentityWorkspaceAcl(...process.argv.slice(3));
+  console.log('Identity workspace runtime UPDATE ACL verified');
+  process.exit(0);
+}
 assert.equal(process.argv.length, 4, 'Expected exact SHA and seven-env aggregate hash');
 const [sha, expectedEnvHash] = process.argv.slice(2);
 assert(/^[a-f0-9]{40}$/.test(sha) && /^[a-f0-9]{64}$/.test(expectedEnvHash), 'Exact SHA and private aggregate hash required');
