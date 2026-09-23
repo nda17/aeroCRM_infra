@@ -77,8 +77,8 @@ seat command/fence constraints before the image switch. Enabling custom-role wri
 separate reviewed env release after every compatible reader and worker is running.
 
 Every backend switch also checks the candidate Billing and CRM Access image inventories.
-Before switching to an older incompatible image, the release stops Gateway and all
-Billing/CRM Access writers, then rejects the switch if CUSTOM data exists, an
+Before switching to an older incompatible image, the release stops all 30
+non-profile backend writers and consumers, then rejects the switch if CUSTOM data exists, an
 administrative-seat operation is unfinished, or any paid period has an administrative
 seat adjustment. Failed checks restart the exact containers stopped by the guard. If an
 automatic rollback is blocked, `releases/backend-rollback-blocked.pending` permits only a
@@ -107,8 +107,8 @@ is additive and remains after an image rollback; keep that schema in place and u
 the guarded release path for any recovery.
 
 The backend compatibility guard also checks the candidate CRM Sales image. When it
-lacks the commerce migration, the release first stops Gateway and CRM Sales writers
-alongside the existing Billing/CRM Access writers, then rejects the image if commerce
+lacks the commerce migration, the release first stops all non-profile backend writers
+and consumers, then rejects the image if commerce
 business data exists. A preview without applied changes does not bar rollback. A
 blocked automatic rollback leaves the existing recovery marker and requires a
 commerce-aware target SHA; an image-only rollback is unsafe once commerce data exists.
@@ -131,6 +131,39 @@ default, then verifies the migration history, trigger and existing runtime/backu
 privileges. It does not rewrite ACLs or existing IDs. A failed hook leaves the
 previous images running; successfully applied DDL stays in place across image
 rollback. Later releases set the flag to `false` and leave its hash empty.
+
+## Workspace closure release
+
+Use `target=backend` with `workspace_closure_migration=true` and the aggregate hash of
+the seven fixed private files `env/migrations/{billing,crm-access,crm-customers,crm-intake,crm-sales,identity,notification-delivery}.env`.
+Each file must be regular, non-symlinked, mode 0600, and contain only
+`NODE_ENV=production` and its service migration-role loopback URL. From
+`/opt/aerocrm/env/migrations` on the backend VPS, calculate the aggregate without
+printing private values:
+
+```bash
+sha256sum ./billing.env ./crm-access.env ./crm-customers.env ./crm-intake.env ./crm-sales.env ./identity.env ./notification-delivery.env | sha256sum | cut -d' ' -f1
+```
+
+Keep `CRM_ACCESS_CLOSURE_ENABLED='false'` in all three CRM Access role env files for
+this first backend release. Under `release.lock`, the hook checks the exact image
+revision, reviewed migration and ACL checksums, private env identities, schema/ACL
+and trigger inventory before starting all compatible roles. It records
+`releases/workspace-closure-compatible.sha` only after readiness and capability
+checks pass. Then render and sync backend env with the gate `true` and run a second
+`target=backend` release of the same SHA with the migration flag `false` and its
+hash empty. That release recreates only the three CRM Access roles, verifies their
+live gate and records `releases/workspace-closure-enabled.sha`. Release
+`target=frontend` last at the same SHA; the workflow checks the backend enabled
+marker. `target=all` and parallel frontend/backend releases are forbidden. Do not
+rerun the historical CRM contract cutover or its previous migration flags.
+
+The guarded rollback stops all non-profile backend writers and consumers and
+checks all seven databases before allowing images without closure enforcement.
+Once a closure fence or operation exists, retain the additive schema and fence;
+do not use an image-only rollback. Turning off new closure admission does not
+stop recovery of a durable CLOSING operation. Acceptance closes only a dedicated
+test workspace; no real payment or customer workspace is involved.
 
 ## Android artifact
 

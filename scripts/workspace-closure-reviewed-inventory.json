@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "crm-access": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14",
+        "20260921020000_add_crm_custom_member_role": "2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514",
+        "20260921020100_crm_custom_roles": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876",
+        "20260921030100_crm_admin_seat_capacity": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d",
+        "20260923030000_workspace_closure": "bf58555641fe010e897ae2d4af2152fa4078c6a86a3fded7c502c1c5476c9cc6"
+      },
+      "aclSha256": "b46577f382eef823e1e79723744027420f880b0d1f8d0a0d70f76569ab6713d1",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "enforce_workspace_closure_fence()",
+        "enforce_workspace_closure_operation()",
+        "guard_workspace_business()",
+        "guard_workspace_intent()"
+      ],
+      "closureTriggerCount": 11
+    },
+    "identity": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "45bef30c1974a8abdb0928fe82eb1e6f446c6420f35bbea2c44cf32177b134d2",
+        "20260920120000_oauth_workspace_client": "7c8768e78bd04d77a53a4ca5fe1bf3ab251e3bb879ccf1a8c9908af2a38b19a1",
+        "20260923030000_workspace_closure": "c870b738c75153e0d6f2883395a8ebd5dad197b87b8f2ea9262ca0c00a355be0"
+      },
+      "aclSha256": "2dadeaca4716c62cb85a42e6579b40e969f988188fd327a9982ba7f007439805",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "enforce_workspace_closure_fence()",
+        "guard_workspace_admission()",
+        "guard_workspace_reactivation()"
+      ],
+      "closureTriggerCount": 4
+    },
+    "billing": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "b6a6babe34607ec210b864289d5f17b285c4924234e3570a9acf190253d85266",
+        "20260921010000_defer_crm_capacity_bindings": "9318239e1b2e2926102f643faacd852782bb64901028f9950eb586fc2d498307",
+        "20260921030000_crm_admin_seat_adjustments": "8deb754f74e6a495ad1c42774f1e7ccb27243358ff6452c62d52037d5cd81201",
+        "20260923030000_workspace_closure": "692fc4e8d1218ff2ab360b1bc33bfe7757a017095728b2b307385b82cd2756f5"
+      },
+      "aclSha256": "103b05b27bd3afcbef967d8a31f2c9f9176c46fbc04b4e317eb1a7f88ee3dcd8",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "enforce_workspace_closure_fence()",
+        "guard_workspace_new_finance()",
+        "guard_workspace_renewal()",
+        "touch_workspace_fence(uuid)"
+      ],
+      "closureTriggerCount": 5
+    },
+    "crm-customers": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
+        "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c"
+      },
+      "aclSha256": "478caa28711e6558b12fe23fe2e69fced50aab05869bac5dffa2347d9b451333",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "guard_workspace_business_write()",
+        "workspace_closure_fence_immutable()"
+      ],
+      "closureTriggerCount": 4
+    },
+    "crm-sales": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "e9cf8e4a39ea31ea0663edea98e8fe97ebb50ee68be9bc1e8b3f8d8d3a6c2c9a",
+        "20260923010000_sales_commerce": "04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433",
+        "20260923030000_workspace_closure": "bb118b4953dbb143cd79e8c6b1c453958c88a38ac709bc57e1c33235c29e7d4a"
+      },
+      "aclSha256": "4faac826630f5828d3aa98a05bf594660a2167d3961d8e4f89ad80d7854b7bac",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "guard_workspace_business_write()",
+        "workspace_closure_fence_immutable()"
+      ],
+      "closureTriggerCount": 16
+    },
+    "crm-intake": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "0fdf108713220e0f25a8ef0561ea8f4fe79e6e50c9f1090890447d4fbdf6c10d",
+        "20260923020000_inbox_notification_id_default": "ae29292abdfca9a89bae67d23624c31e53c817bb85a68b8b8a48b7381f798ca8",
+        "20260923030000_workspace_closure": "cb0b4178225089f3d226fe4da1517df8895c9438688ce2ec3ff2eb1b9a0383ae"
+      },
+      "aclSha256": "512ab4fcf18950a894cc9143e7253696a4c520f74f65d5628d8878842f9df9e2",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "guard_acceptance_admission()",
+        "guard_acceptance_outbox()",
+        "guard_workspace_business_write()",
+        "guard_workspace_inbox_entry()",
+        "workspace_closure_fence_immutable()"
+      ],
+      "closureTriggerCount": 10
+    },
+    "notification-delivery": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "33976a4478f5ba7f960f1afdcfba7d76caf80f9e3998ad6fd175ec4a4ce4bceb",
+        "20260920010000_crm_runtime_contracts": "2ed176683aa3ba406e865df9b22b6fa31e880b45cef0cf7692bd3ecc57c4b3dc",
+        "20260923030000_workspace_closure": "b451c18521ba07170352e55e8ab6e47f59937375bd7a9a4498c57d16c1bf49b5"
+      },
+      "aclSha256": "27c3c403047ef9ca046f408a2f9f39925f478721b03e2b8b96c84e83022d6294",
+      "closureRoutines": [
+        "assert_workspace_open(uuid)",
+        "guard_crm_dispatch_scope()",
+        "workspace_closure_fence_immutable()"
+      ],
+      "closureTriggerCount": 2
+    }
+  }
+}

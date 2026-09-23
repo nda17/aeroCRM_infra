@@ -11,6 +11,9 @@ const billingEnvFile = '/opt/aerocrm/env/migrations/billing.env';
 const crmAccessEnvFile = '/opt/aerocrm/env/migrations/crm-access.env';
 const crmSalesEnvFile = '/opt/aerocrm/env/migrations/crm-sales.env';
 const commerceMigration = '20260923010000_sales_commerce';
+const closureMigration = '20260923030000_workspace_closure';
+const closureOwners = ['crm-access', 'identity', 'billing', 'crm-customers', 'crm-sales', 'crm-intake', 'notification-delivery'];
+const closureInventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure-reviewed-inventory.json', import.meta.url)));
 const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
 const commerceBusinessDataTables = [
   'commerce_catalog_items', 'commerce_deal_lines', 'commerce_commands',
@@ -103,6 +106,38 @@ assert.equal(fs.realpathSync('.'), '/opt/aerocrm', 'Run from /opt/aerocrm');
 assert([3, 4].includes(process.argv.length) && (!mode || writersStopped),
   'Expected candidate exact SHA and optional --writers-stopped');
 assert(/^[a-f0-9]{40}$/.test(candidateSha), 'Candidate exact SHA required');
+
+const closureCapabilities = closureOwners.map(service => imageCapabilities(
+  `aerocrm/${service}:${candidateSha}`, [closureMigration],
+  { [closureMigration]: closureInventory.owners[service].migrations[closureMigration] }
+)[0]);
+assert(closureCapabilities.every(value => typeof value === 'boolean'), 'Candidate closure inventory is invalid');
+if (!closureCapabilities.every(Boolean)) {
+  if (!writersStopped) {
+    console.error('Candidate backend images require a stopped-writer closure compatibility check');
+    process.exit(2);
+  }
+  for (const service of closureOwners) {
+    const schema = service.replaceAll('-', '_');
+    const identity = readDatabaseUrl(`/opt/aerocrm/env/migrations/${service}.env`,
+      `${schema.toUpperCase()}_DATABASE_URL`, {
+        database: `aerocrm_${schema}`, role: `aerocrm_${schema}_migration`, schema
+      });
+    const exists = inspectDatabase(identity, `SELECT json_build_object(
+      'fences', to_regclass('${schema}.workspace_closure_fences') IS NOT NULL,
+      'operations', ${service === 'crm-access' ? "to_regclass('crm_access.crm_workspace_closures') IS NOT NULL" : 'false'})::text;`);
+    if (!exists.fences) {
+      assert(!exists.operations, 'Closure operation table exists without its fence');
+      continue;
+    }
+    const state = inspectDatabase(identity, `SELECT json_build_object(
+      'fenceExists', EXISTS (SELECT 1 FROM ${schema}.workspace_closure_fences WHERE fenced_at IS NOT NULL),
+      'operationExists', ${service === 'crm-access' && exists.operations
+        ? 'EXISTS (SELECT 1 FROM crm_access.crm_workspace_closures)' : 'false'})::text;`);
+    assert(!state.fenceExists && !state.operationExists,
+      `Candidate backend images cannot protect persisted workspace closure: ${service}`);
+  }
+}
 
 const crmCapabilities = imageCapabilities(`aerocrm/crm-access:${candidateSha}`, [
   '20260921020000_add_crm_custom_member_role',

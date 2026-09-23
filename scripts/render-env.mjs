@@ -117,13 +117,15 @@ for (const [service, role, port, explicit] of roles) {
     providers(['TELEGRAM_INFO_BOT_TOKEN', 'TELEGRAM_SUPPORT_BOT_TOKEN', 'TELEGRAM_API_BASE_URL']),
     base('SUPPORT'), base('CRM_INTAKE'), base('CRM_SALES'),
     tokens(['SUPPORT_NOTIFICATION_DELIVERY_TOKEN', 'CRM_INTAKE_NOTIFICATION_DELIVERY_TOKEN', 'CRM_SALES_NOTIFICATION_DELIVERY_TOKEN',
-      'NOTIFICATION_DELIVERY_CRM_INTAKE_TOKEN', 'NOTIFICATION_DELIVERY_CRM_SALES_TOKEN', 'NOTIFICATION_DELIVERY_OPERATIONS_TOKEN']),
+      'NOTIFICATION_DELIVERY_CRM_INTAKE_TOKEN', 'NOTIFICATION_DELIVERY_CRM_SALES_TOKEN', 'NOTIFICATION_DELIVERY_OPERATIONS_TOKEN',
+      'NOTIFICATION_DELIVERY_CRM_ACCESS_TOKEN']),
     { NOTIFICATION_DELIVERY_KINDS: ['campaign-email', 'campaign-telegram', 'daily-summary-delivery-telegram', 'crm-invitation-email',
       'crm-task-reminder-email', 'crm-task-reminder-telegram', 'crm-intake-sla-email', 'crm-intake-sla-telegram',
       'support-team-email', 'support-team-telegram', 'support-client-email', 'subscription-expiry-telegram', 'operations-backup-report-telegram'].join(',') });
   if (service === 'campaigns') Object.assign(env, identityClient('CAMPAIGNS'), base('BILLING'), tokens(['BILLING_CAMPAIGNS_TOKEN', 'CAMPAIGNS_OPERATIONS_TOKEN']));
   if (service === 'reporting') Object.assign(env, identityClient('REPORTING'), base('OPERATIONS'), tokens(['REPORTING_INTERNAL_TOKEN', 'REPORTING_OPERATIONS_TOKEN']));
   if (service === 'billing' && !isPublisher) Object.assign(env, identityClient('BILLING'),
+    base('CRM_ACCESS'),
     tokens(['BILLING_IDENTITY_TOKEN', 'BILLING_CRM_ACCESS_TOKEN', 'BILLING_CRM_ACCESS_COMMERCE_TOKEN', 'BILLING_CAMPAIGNS_TOKEN', 'BILLING_OPERATIONS_TOKEN']),
     { BILLING_CRM_ACCESS_COMMERCE_BASE_URL: 'http://127.0.0.1:5300', CRM_FRONTEND_ORIGIN: new URL(q('NEXT_PUBLIC_APP_URL')).origin },
     providers(['PAYMENT_METHOD_ENCRYPTION_KEY', 'CRM_PAYMENT_LAUNCH_MODE', 'BILLING_CRM_PAYMENTS_ENABLED', 'BILLING_CRM_RECONCILIATION_ENABLED']),
@@ -150,17 +152,21 @@ for (const [service, role, port, explicit] of roles) {
   if (service === 'crm-access') {
     env.CRM_ACCESS_BILLING_ENABLED = q('CRM_ACCESS_BILLING_ENABLED');
     env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = booleanInput('CRM_ACCESS_CUSTOM_ROLES_ENABLED');
+    env.CRM_ACCESS_CLOSURE_ENABLED = booleanInput('CRM_ACCESS_CLOSURE_ENABLED');
     // The Access module constructs its service clients in every process role.
-    Object.assign(env, identityClient('CRM_ACCESS'), base('BILLING'), base('CRM_SALES'), tokens([
+    Object.assign(env, identityClient('CRM_ACCESS'), base('BILLING'), base('CRM_SALES'),
+      base('CRM_CUSTOMERS'), base('CRM_INTAKE'), base('NOTIFICATION_DELIVERY'), tokens([
       'BILLING_CRM_ACCESS_TOKEN', 'BILLING_CRM_ACCESS_COMMERCE_TOKEN', 'CRM_ACCESS_CRM_CUSTOMERS_TOKEN',
-      'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_ACCESS_CRM_INTAKE_TOKEN', 'CRM_ACCESS_SUPPORT_TOKEN', 'CRM_SALES_CRM_ACCESS_TOKEN']));
+      'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_ACCESS_CRM_INTAKE_TOKEN', 'CRM_ACCESS_SUPPORT_TOKEN', 'CRM_SALES_CRM_ACCESS_TOKEN',
+      'CRM_CUSTOMERS_CRM_ACCESS_TOKEN', 'CRM_INTAKE_CRM_ACCESS_TOKEN', 'NOTIFICATION_DELIVERY_CRM_ACCESS_TOKEN']));
     if (!isApi) env.CRM_ACCESS_RABBITMQ_ASSERT_TOPOLOGY = 'false';
   }
   if (service === 'crm-intake') {
     env.CRM_INTAKE_SLA_ENABLED = 'true';
     if (!isPublisher) Object.assign(env, base('CRM_ACCESS'), base('CRM_CUSTOMERS'), base('CRM_SALES'), base('NOTIFICATION_DELIVERY'), tokens([
       'CRM_ACCESS_CRM_INTAKE_TOKEN', 'CRM_CUSTOMERS_CRM_INTAKE_TOKEN', 'CRM_SALES_CRM_INTAKE_TOKEN',
-      'CRM_INTAKE_NOTIFICATION_DELIVERY_TOKEN', 'NOTIFICATION_DELIVERY_CRM_INTAKE_TOKEN']));
+      'CRM_INTAKE_NOTIFICATION_DELIVERY_TOKEN', 'NOTIFICATION_DELIVERY_CRM_INTAKE_TOKEN',
+      'CRM_INTAKE_CRM_ACCESS_TOKEN']));
     if (!isApi) {
       const key = role.startsWith('sla-') ? 'CRM_INTAKE_SLA' : 'CRM_INTAKE';
       env[`${key}_RABBITMQ_URL`] = env.RABBITMQ_URL;
@@ -169,7 +175,8 @@ for (const [service, role, port, explicit] of roles) {
     }
   }
   if (service === 'crm-customers') Object.assign(env, base('CRM_ACCESS'), tokens(['CRM_ACCESS_CRM_CUSTOMERS_TOKEN',
-    'CRM_CUSTOMERS_CRM_INTAKE_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN']), providers(['CRM_CUSTOMERS_DADATA_API_KEY']));
+    'CRM_CUSTOMERS_CRM_INTAKE_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN', 'CRM_CUSTOMERS_CRM_ACCESS_TOKEN']),
+    providers(['CRM_CUSTOMERS_DADATA_API_KEY']));
   if (service === 'crm-sales') Object.assign(env, base('CRM_ACCESS'), base('CRM_CUSTOMERS'), base('NOTIFICATION_DELIVERY'), tokens([
     'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN', 'CRM_SALES_CRM_ACCESS_TOKEN', 'CRM_SALES_CRM_INTAKE_TOKEN',
     'CRM_SALES_NOTIFICATION_DELIVERY_TOKEN', 'NOTIFICATION_DELIVERY_CRM_SALES_TOKEN']), { CRM_TASK_REMINDERS_ENABLED: 'true' });
