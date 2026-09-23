@@ -116,6 +116,22 @@ The verified S3 backups remain recovery evidence, but automatic S3 restore is st
 disabled and requires the separate PostgreSQL 18 restore admission work described
 in the project backlog.
 
+## CRM Intake notification UUID default migration
+
+The first compatible backend release uses `crm_intake_notifications_migration=true`
+and the SHA-256 of the fixed private VPS file
+`/opt/aerocrm/env/migrations/crm-intake.env` as
+`crm_intake_notifications_migration_env_hash`. The file must be regular,
+non-symlinked, mode 0600, and contain only `NODE_ENV=production` and a
+loopback `CRM_INTAKE_DATABASE_URL` for the `aerocrm_crm_intake_migration` role,
+`aerocrm_crm_intake` database, and `crm_intake` schema. This independent hook
+runs under `release.lock`, verifies the exact image and service-owned migration
+and ACL inventories, applies only the additive `inbox_notifications.id` UUID
+default, then verifies the migration history, trigger and existing runtime/backup
+privileges. It does not rewrite ACLs or existing IDs. A failed hook leaves the
+previous images running; successfully applied DDL stays in place across image
+rollback. Later releases set the flag to `false` and leave its hash empty.
+
 ## Android artifact
 
 Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.

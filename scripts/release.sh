@@ -11,13 +11,16 @@ crm_custom_roles_migration=${6:-false}
 crm_custom_roles_migration_env_hash=${7:-}
 crm_sales_commerce_migration=${8:-false}
 crm_sales_commerce_migration_env_hash=${9:-}
-[[ $# -le 9 ]] || exit 64
+crm_intake_notifications_migration=${10:-false}
+crm_intake_notifications_migration_env_hash=${11:-}
+[[ $# -le 11 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 [[ "$billing_capacity_migration" == true || "$billing_capacity_migration" == false ]] || exit 64
 [[ "$crm_custom_roles_migration" == true || "$crm_custom_roles_migration" == false ]] || exit 64
 [[ "$crm_sales_commerce_migration" == true || "$crm_sales_commerce_migration" == false ]] || exit 64
+[[ "$crm_intake_notifications_migration" == true || "$crm_intake_notifications_migration" == false ]] || exit 64
 [[ "$billing_capacity_migration" == "$crm_custom_roles_migration" ]] || exit 64
 if [[ "$billing_capacity_migration" == true ]]; then
   [[ "$role" == backend && "$billing_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -33,6 +36,11 @@ if [[ "$crm_sales_commerce_migration" == true ]]; then
   [[ "$role" == backend && "$crm_sales_commerce_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 else
   [[ -z "$crm_sales_commerce_migration_env_hash" ]] || exit 64
+fi
+if [[ "$crm_intake_notifications_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_intake_notifications_migration_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
+else
+  [[ -z "$crm_intake_notifications_migration_env_hash" ]] || exit 64
 fi
 cd /opt/aerocrm
 exec 9>release.lock
@@ -79,6 +87,10 @@ fi
 if [[ "$crm_sales_commerce_migration" == true ]]; then
   "$node_bin" --check scripts/crm-sales-commerce-migration.mjs
   "$node_bin" scripts/crm-sales-commerce-migration.mjs "$sha" "$crm_sales_commerce_migration_env_hash"
+fi
+if [[ "$crm_intake_notifications_migration" == true ]]; then
+  "$node_bin" --check scripts/crm-intake-notifications-migration.mjs
+  "$node_bin" scripts/crm-intake-notifications-migration.mjs "$sha" "$crm_intake_notifications_migration_env_hash"
 fi
 previous=$(cat "releases/$role.sha" 2>/dev/null || true)
 export IMAGE_SHA="$sha"

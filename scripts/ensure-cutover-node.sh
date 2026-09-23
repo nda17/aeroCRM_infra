@@ -13,6 +13,7 @@ case "${1:-}" in
   --billing) checked_scripts=(billing-capacity-migration.mjs) ;;
   --crm-custom-roles) checked_scripts=(crm-custom-roles-migration.mjs) ;;
   --crm-sales-commerce) checked_scripts=(crm-sales-commerce-migration.mjs) ;;
+  --crm-intake-notifications) checked_scripts=(crm-intake-notifications-migration.mjs) ;;
   --rollback-guard) checked_scripts=(backend-rollback-compatibility-guard.mjs) ;;
   *) echo 'Unknown Node verification mode' >&2; exit 64 ;;
 esac
