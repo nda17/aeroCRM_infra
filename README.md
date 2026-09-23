@@ -150,10 +150,15 @@ this first backend release. Under `release.lock`, the hook checks the exact imag
 revision, reviewed migration and ACL checksums, private env identities, schema/ACL
 and trigger inventory before starting all compatible roles. It records
 `releases/workspace-closure-compatible.sha` only after readiness and capability
-checks pass. Then render and sync backend env with the gate `true` and run a second
-`target=backend` release of the same SHA with the migration flag `false` and its
-hash empty. That release recreates only the three CRM Access roles, verifies their
-live gate and records `releases/workspace-closure-enabled.sha`. Release
+checks pass. Enable the gate through the GitHub release workflow with
+`target=backend`, `workspace_closure_enable=true`, the same green CI/image SHA,
+`backend_env_before_hash` for the gate-off env and `backend_env_hash` for the
+approved gate-on env. Keep all migration flags false. The reviewed helper runs
+under `release.lock`, checks the exact compatible SHA and all image revisions,
+and changes only the three CRM Access gate lines; it can resume a partial change
+after verifying both projected aggregate hashes. The existing release then
+recreates the three CRM Access roles, verifies their live gate and records
+`releases/workspace-closure-enabled.sha`. Release
 `target=frontend` last at the same SHA; the workflow checks the backend enabled
 marker. `target=all` and parallel frontend/backend releases are forbidden. Do not
 rerun the historical CRM contract cutover or its previous migration flags.
