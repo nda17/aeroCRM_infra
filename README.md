@@ -13,6 +13,59 @@ Keep this checkout beside `aeroCRM_monorepo`. Private inputs live in the parent 
 
 Release through `aeroCRM_monorepo/.github/workflows/release.yml`: exact green production CI SHA, immutable infra SHA and both verified env hashes are required. CI builds images; VPS only load and run them. `scripts/release.sh` serializes deployment and checks every enabled role.
 
+## Selective backend releases
+
+CI emits `backend-manifest.json` for the complete 13-app composition. Each entry binds
+its own source SHA, effective build-context SHA-256, immutable Docker image ID,
+compressed artifact SHA-256 and originating green CI run. The manifest's release SHA
+identifies the product snapshot; retained apps may keep older source SHAs. Compose uses
+per-app image variables and `APP_REVISION`, so ordinary releases preserve containers
+whose image and effective configuration have not changed. Every runtime role, including
+retained roles, is checked against its expected image ID, revision and Compose effective
+configuration hash. Snapshot env resolution and stable bind sources are checked against
+the live container config-hash labels without printing private values. The restore profile
+is excluded, and an unexpected restore process blocks adoption.
+
+The workflow uploads reviewed infra and manifest into a unique
+`releases/staging/<sha>-<run>-<attempt>` directory. It invokes the staged `release.sh`
+with its existing arguments plus `REVIEWED_INFRA_DIR`, `BACKEND_MANIFEST_PATH`,
+`INFRA_SHA` and `CI_RUN_ID`. The controller acquires `release.lock` before it snapshots
+or applies any configuration. Config snapshots retain private env files and reviewed
+Compose/RabbitMQ configuration. Active Compose paths stay stable; image substitutions
+live in `releases/backend-images.env`, passed explicitly with `docker compose --env-file`.
+The host's unrelated `.env` file is preserved.
+
+After all 30 readiness endpoints, immutable runtime identities and enabled closure
+capability checks pass, one atomic write commits `releases/backend-state.json`.
+This canonical document contains the CI manifest, infra SHA, env/compose hashes and
+closure enabled/schema-anchor state. `backend.sha` and closure marker files are derived
+projections. The previous complete state is saved in `backend-previous-state.json`;
+its matching config snapshot is retained for rollback. Rollback validates every old
+image and persisted-data compatibility before restoring its full mixed composition
+and private configuration. It never rolls database changes back.
+
+A durable `backend-release.pending.json` journal records the exact target and previous
+states before hooks or switching. Repeating its original target/config can complete a
+verified partial switch. An unrelated target, unexpected runtime or conflicting canonical
+state fails closed. A crash after the canonical write is repaired by validating the
+committed runtime/readiness and rewriting projections without restarting containers.
+Repeating the same committed manifest/config also skips the Compose switch.
+
+Initial adoption requires a uniform full CI manifest (`force_full_backend=true`), coherent
+legacy release/closure markers and the exact 30-role live image inventory. Legacy image
+provenance has no CI artifact metadata; the private rollback-only synthesized manifest
+uses zero context/artifact hashes and CI run `0`. New committed target manifests always
+come from the verified green CI. Existing migration flags retain their reviewed hooks,
+but require a uniform full manifest before any mutation. Historical contract cutover and
+initial closure-gate enable must finish before adoption; their legacy workflows reject
+an adopted canonical state. Ordinary enabled-closure upgrades do not force-recreate CRM
+Access. A changed RabbitMQ configuration explicitly recreates RabbitMQ; unchanged broker
+configuration retains its container and stable bind path.
+
+Infrastructure CI runs strict manifest/runtime fixtures, interrupted-switch and rollback
+fixtures, existing policy checks and a real Docker Compose container-retention regression.
+Production release continues exclusively through the GitHub workflow.
+
 Fresh database bootstrap precedes writers: apply each service migration with its migration role, apply/verify ACLs, bootstrap service administrators and commercial policy, then service-owned settings. Database and broker roles use credentials dedicated to this deployment.
 
 Database backups go to private S3. The Ed25519 private signing key is mounted only into the maintenance worker. Restore stays disabled until the separate S3 admission/shared-cluster recovery requirements are fulfilled.

@@ -181,6 +181,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
 }
 assert(process.platform === 'linux' && fs.realpathSync('.') === '/opt/aerocrm',
   'Run on the backend host from /opt/aerocrm');
+assert(!fs.existsSync('/opt/aerocrm/releases/backend-state.json'),
+  'Historical initial closure enable is unsupported after canonical backend adoption');
 assert(process.argv.length === 5, 'Expected exact SHA, before hash, after hash');
 enable('/opt/aerocrm', ...process.argv.slice(2));
 console.log('CRM Access closure gate env enabled and aggregate hash verified');

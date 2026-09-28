@@ -14,7 +14,7 @@ case "${1:-}" in
   --crm-custom-roles) checked_scripts=(crm-custom-roles-migration.mjs) ;;
   --crm-sales-commerce) checked_scripts=(crm-sales-commerce-migration.mjs) ;;
   --crm-intake-notifications) checked_scripts=(crm-intake-notifications-migration.mjs) ;;
-  --rollback-guard) checked_scripts=(backend-rollback-compatibility-guard.mjs) ;;
+  --rollback-guard) checked_scripts=(backend-rollback-compatibility-guard.mjs backend-release-state.mjs backend-release-transaction.mjs backend-release.mjs) ;;
   *) echo 'Unknown Node verification mode' >&2; exit 64 ;;
 esac
 [[ $# -le 1 ]] || { echo 'Too many Node verification arguments' >&2; exit 64; }
@@ -40,7 +40,7 @@ verify_runtime() {
         typeof fetch !== 'function' || typeof AbortSignal.timeout !== 'function') process.exit(1)
   })" || fail 'Cutover Node runtime smoke failed'
   for checked_script in "${checked_scripts[@]}"; do
-    "$candidate" --check "/opt/aerocrm/scripts/$checked_script"
+    "$candidate" --check "${REVIEWED_INFRA_DIR:-/opt/aerocrm}/scripts/$checked_script"
   done
 }
 

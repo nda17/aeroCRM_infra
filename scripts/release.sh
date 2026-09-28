@@ -91,6 +91,16 @@ if [[ "$workspace_closure_identity_acl_repair" == true ]]; then
 else
   [[ -z "$workspace_closure_identity_env_hash" ]] || exit 64
 fi
+# The staged backend controller acquires the shared lock before any configuration mutation.
+if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
+  node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
+  [[ -x "$node_bin" ]] || { echo 'Pinned backend release Node is unavailable' >&2; exit 1; }
+  exec "$node_bin" "$(dirname "$0")/backend-release.mjs" "$@"
+fi
+if [[ "$role" == backend && -f /opt/aerocrm/releases/backend-state.json ]]; then
+  echo 'Canonical backend state adopted; backend manifest is required' >&2
+  exit 1
+fi
 cd /opt/aerocrm
 exec 9>release.lock
 flock -n 9 || { echo 'Another aeroCRM release is active' >&2; exit 1; }
@@ -252,13 +262,7 @@ rollback() {
   exit "$failure"
 }
 trap rollback ERR
-if [[ "$role" == backend && "$closure_gate" == true ]]; then
-  docker compose -f "compose/$role.yml" up -d --no-deps --force-recreate \
-    crm-access-api crm-access-worker crm-access-outbox-publisher
-  docker compose -f "compose/$role.yml" up -d --remove-orphans
-else
-  docker compose -f "compose/$role.yml" up -d --remove-orphans
-fi
+docker compose -f "compose/$role.yml" up -d --remove-orphans
 if [[ "$role" == frontend ]]; then
   for port in 3100 3200 3300; do
     curl --fail --silent --show-error --retry 12 --retry-delay 2 --retry-connrefused --connect-timeout 2 --max-time 5 --retry-max-time 45 "http://127.0.0.1:$port/__frontend/health" >/dev/null

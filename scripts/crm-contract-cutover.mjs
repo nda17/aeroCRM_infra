@@ -79,6 +79,8 @@ async function cutover(args) {
     process.exitCode = result.status ?? 1;
     return;
   }
+  assert(!fs.existsSync('releases/backend-state.json'),
+    'Historical CRM cutover is unsupported after canonical backend adoption; use a reviewed manifest-aware migration');
   const compose = (values, selectedSha = sha, input) => run('Docker Compose', 'docker',
     ['compose', '-f', 'compose/backend.yml', ...values], { env: { ...process.env, IMAGE_SHA: selectedSha }, input });
   const sql = (schema, input) => compose(['exec', '-T', 'postgres', 'psql', '-X', '-qAt', '-v',

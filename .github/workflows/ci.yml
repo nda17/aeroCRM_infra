@@ -1,0 +1,33 @@
+name: Infrastructure CI
+on:
+  push:
+    branches: ['dev_*/**', 'prod_*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate release contracts and rollback failures
+        run: |
+          bash -n scripts/release.sh
+          bash -n scripts/ensure-cutover-node.sh
+          node --check scripts/backend-release.mjs
+          node --check scripts/backend-release-state.mjs
+          node --check scripts/backend-release-transaction.mjs
+          node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs
+          bash scripts/release.sh --policy-self-test
+          node scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
+          node scripts/workspace-closure-enable.mjs --policy-self-test
+          node --test scripts/crm-contract-cutover-preflight.test.mjs
+      - name: Verify Compose preserves unaffected containers
+        env:
+          REQUIRE_DOCKER_COMPOSE_TEST: 'true'
+        run: node --test scripts/backend-release-compose.integration.test.mjs

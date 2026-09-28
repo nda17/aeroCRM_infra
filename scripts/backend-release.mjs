@@ -1,0 +1,373 @@
+#!/usr/bin/env node
+// Executed by the reviewed, per-run staged release.sh; never builds images on the VPS.
+import assert from 'node:assert/strict';
+import { spawnSync, execFileSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
+import { apps, roles, ports, validateManifest, validateState, uniformManifest, compositionDiff,
+  imageVariables, stateKey, assertRuntime, validatePending } from './backend-release-state.mjs';
+
+import { runReleaseTransaction } from './backend-release-transaction.mjs';
+
+const root = '/opt/aerocrm';
+const script = fileURLToPath(import.meta.url);
+const args = process.argv.slice(2);
+assert.equal(process.platform, 'linux', 'Backend releases run only on the Linux VPS');
+assert.equal(fs.realpathSync('.'), root, 'Run from /opt/aerocrm');
+if (args[0] !== '--locked') {
+  const child = spawnSync('flock', ['-n', `${root}/release.lock`, process.execPath, script, '--locked', ...args],
+    { stdio: 'inherit', env: process.env });
+  process.exit(child.status ?? 1);
+}
+args.shift();
+const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
+  commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
+  closureHash = '', aclRepair = 'false', aclHash = ''] = args;
+assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
+assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
+assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
+assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
+assert(args.length >= 3 && args.length <= 15, 'Invalid backend release argument count');
+const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash]];
+for (const [enabled, hash] of flagPairs) {
+  assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
+  assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
+}
+assert.equal(billing, custom, 'Billing and custom-role hooks must be paired');
+if (closureMigration === 'true' || aclRepair === 'true')
+  assert([billing, commerce, intake].every(value => value === 'false') &&
+    !(closureMigration === 'true' && aclRepair === 'true'), 'Incompatible migration flags');
+const stagedRoot = fs.realpathSync(process.env.REVIEWED_INFRA_DIR ?? path.dirname(path.dirname(script)));
+assert(stagedRoot.startsWith(`${root}/releases/staging/`), 'Reviewed infra must be staged per run');
+assert.equal(path.dirname(script), `${stagedRoot}/scripts`);
+const manifestPath = fs.realpathSync(process.env.BACKEND_MANIFEST_PATH ?? '');
+assert(manifestPath.startsWith(`${stagedRoot}/`), 'Manifest must belong to the immutable run stage');
+const manifest = validateManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
+assert.equal(manifest.releaseSha, sha); assert.equal(manifest.ciRunId, process.env.CI_RUN_ID);
+const releases = `${root}/releases`;
+const stateFile = `${releases}/backend-state.json`;
+const pendingFile = `${releases}/backend-release.pending.json`;
+const previousFile = `${releases}/backend-previous-state.json`;
+const zeroHash = '0'.repeat(64);
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair];
+assert(flags.every(value => ['true', 'false'].includes(value)));
+const migrationRequested = flags.includes('true');
+assert(!migrationRequested || uniformManifest(manifest),
+  'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
+fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
+assert(!fs.existsSync(`${releases}/crm-contract-cutover.pending`), 'Resolve pending CRM contract cutover first');
+const blocked = readMarker('backend-rollback-blocked.pending');
+assert(!blocked || blocked === sha, 'Repeat the exact target SHA to recover a blocked rollback');
+
+function execute(label, command, commandArgs, options = {}) {
+  try {
+    return execFileSync(command, commandArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 300_000, maxBuffer: 8 * 1024 * 1024, ...options }).trim();
+  } catch (error) {
+    const failure = new Error(`${label} failed; private command output suppressed`);
+    failure.status = error.status; throw failure;
+  }
+}
+function digest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
+function readMarker(name) { return fs.existsSync(`${releases}/${name}`) ? fs.readFileSync(`${releases}/${name}`, 'utf8').trim() : ''; }
+function atomic(file, value) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  const fd = fs.openSync(temporary, 'wx', 0o600);
+  try { fs.writeFileSync(fd, value); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  fs.renameSync(temporary, file);
+  const directory = fs.openSync(path.dirname(file), 'r');
+  try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
+}
+function writeJson(file, value) { atomic(file, `${JSON.stringify(value, null, 2)}\n`); }
+function envHash(directory) {
+  return execute('Environment hash', 'bash', ['-c',
+    'cd "$1"; find . -maxdepth 1 -type f -name "*.env" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1', '_', directory]);
+}
+function validateEnv(directory) {
+  const directoryStat = fs.lstatSync(directory);
+  assert(directoryStat.isDirectory() && !directoryStat.isSymbolicLink() && fs.realpathSync(directory) === directory,
+    'Environment directory must have its canonical regular path');
+  for (const file of fs.readdirSync(directory).filter(name => name.endsWith('.env'))) {
+    const stat = fs.lstatSync(`${directory}/${file}`);
+    assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600,
+      'Environment files must be private regular files with mode 0600');
+  }
+}
+function closureGate(directory) {
+  const values = ['crm-access-api', 'crm-access-worker', 'crm-access-outbox-publisher'].map(runtime =>
+    parseEnv(fs.readFileSync(`${directory}/${runtime}.env`, 'utf8')).CRM_ACCESS_CLOSURE_ENABLED);
+  assert(values.every(value => value === 'true') || values.every(value => value === 'false'),
+    'CRM Access closure gate must be explicit and uniform');
+  return values[0] === 'true';
+}
+function composeHash(directory) {
+  return digest(Buffer.concat(['backend.yml', 'rabbitmq.conf'].map(name =>
+    Buffer.concat([Buffer.from(`${name}\0`), fs.readFileSync(`${directory}/${name}`)]))));
+}
+function configDirectory(state) { return `${releases}/backend-configs/${stateKey(state)}`; }
+function snapshot(state, sourceCompose, sourceEnv) {
+  const destination = configDirectory(state);
+  if (!fs.existsSync(destination)) {
+    const temporary = `${destination}.${randomUUID()}.tmp`;
+    fs.mkdirSync(`${temporary}/compose`, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(`${temporary}/env/backend`, { recursive: true, mode: 0o700 });
+    for (const name of ['backend.yml', 'rabbitmq.conf']) fs.copyFileSync(`${sourceCompose}/${name}`, `${temporary}/compose/${name}`);
+    for (const name of fs.readdirSync(sourceEnv).filter(name => name.endsWith('.env'))) {
+      fs.copyFileSync(`${sourceEnv}/${name}`, `${temporary}/env/backend/${name}`);
+      fs.chmodSync(`${temporary}/env/backend/${name}`, 0o600);
+    }
+    // The private provenance signing key remains in its stable, access-controlled host path.
+    fs.symlinkSync(`${root}/secrets`, `${temporary}/secrets`);
+    writeJson(`${temporary}/manifest.json`, state.manifest);
+    fs.renameSync(temporary, destination);
+  }
+  validateSnapshot(state);
+  return destination;
+}
+function validateSnapshot(state) {
+  const directory = configDirectory(state);
+  assert.equal(composeHash(`${directory}/compose`), state.composeHash, 'Snapshot compose hash mismatch');
+  validateEnv(`${directory}/env/backend`);
+  assert.equal(envHash(`${directory}/env/backend`), state.envHash, 'Snapshot env hash mismatch');
+  assert.equal(closureGate(`${directory}/env/backend`), state.closure.enabled);
+  assert.deepEqual(JSON.parse(fs.readFileSync(`${directory}/manifest.json`, 'utf8')), state.manifest);
+}
+function compose(state, commandArgs) {
+  validateSnapshot(state);
+  return execute('Reviewed backend compose', 'docker', ['compose', '--project-name', 'aerocrm-backend', '--env-file', `${releases}/backend-images.env`, '-f', `${root}/compose/backend.yml`, ...commandArgs],
+    { env: { ...process.env, COMPOSE_PROFILES: '', IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) } });
+}
+function inspectImages(candidate) {
+  for (const app of apps) {
+    const entry = candidate.services[app];
+    const image = `aerocrm/${app}:${entry.sourceSha}`;
+    const object = JSON.parse(execute(`${app} image verification`, 'docker', ['image', 'inspect', image]))[0];
+    assert.equal(object.Id, entry.imageId, `Immutable image mismatch: ${app}`);
+    assert.equal(object.Config.Labels?.['org.opencontainers.image.revision'], entry.sourceSha,
+      `Image revision mismatch: ${app}`);
+  }
+}
+function runtime() {
+  const ids = execute('Backend runtime inventory', 'docker', ['ps', '-aq', '--filter', 'label=com.docker.compose.project=aerocrm-backend']).split('\n').filter(Boolean);
+  assert(ids.length > 0, 'No baseline backend runtime');
+  return JSON.parse(execute('Backend runtime verification', 'docker', ['inspect', ...ids]))
+    .filter(c => !['postgres', 'rabbitmq'].includes(c.Config.Labels?.['com.docker.compose.service']))
+    .map(c => ({ role: c.Config.Labels?.['com.docker.compose.service'], id: c.Id, imageId: c.Image,
+      image: c.Config.Image, revision: c.Config.Env.find(value => value.startsWith('APP_REVISION='))?.slice(13), running: c.State.Running,
+      configHash: c.Config.Labels?.['com.docker.compose.config-hash'],
+      closureGate: c.Config.Env.find(value => value.startsWith('CRM_ACCESS_CLOSURE_ENABLED='))?.split('=')[1] }));
+}
+const configHashes = new Map();
+function expectedConfigHashes(state) {
+  const key = stateKey(state);
+  if (configHashes.has(key)) return configHashes.get(key);
+  const directory = configDirectory(state);
+  const expectedFile = `${directory}/compose/effective-check.yml`;
+  // Env files are resolved from the private snapshot. Bind sources remain their stable live paths.
+  const template = fs.readFileSync(`${directory}/compose/backend.yml`, 'utf8')
+    .replaceAll('./rabbitmq.conf:', `${root}/compose/rabbitmq.conf:`)
+    .replaceAll('../secrets/', `${root}/secrets/`);
+  atomic(expectedFile, template);
+  const output = execute('Expected backend effective config hashes', 'docker', ['compose', '--project-name', 'aerocrm-backend',
+    '-f', expectedFile, 'config', '--hash', '*'],
+    { env: { ...process.env, COMPOSE_PROFILES: '', IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) } });
+  const hashes = Object.fromEntries(output.split('\n').filter(Boolean).map(line => {
+    const pair = line.trim().split(/\s+/);
+    assert(pair.length === 2 && /^[a-f0-9]{64}$/.test(pair[1]), 'Unexpected Compose config hash report');
+    return pair;
+  }));
+  const allowedRoles = [...Object.values(roles).flat(), 'postgres', 'rabbitmq', 'operations-restore-worker'];
+  assert(Object.keys(hashes).every(role => allowedRoles.includes(role)), 'Unexpected role in reviewed backend Compose');
+  for (const role of Object.values(roles).flat()) assert(hashes[role], `Missing reviewed Compose role: ${role}`);
+  configHashes.set(key, hashes);
+  return hashes;
+}
+function verifyRuntime(state, alternate = null, allowStopped = false) {
+  const current = runtime();
+  assertRuntime(state.manifest, current, alternate?.manifest, allowStopped);
+  const expected = expectedConfigHashes(state);
+  const alternative = alternate ? expectedConfigHashes(alternate) : null;
+  for (const container of current)
+    assert(container.configHash === expected[container.role] ||
+      (alternative && container.configHash === alternative[container.role]),
+      `Runtime effective configuration drift: ${container.role}`);
+  for (const container of current.filter(c => roles['crm-access'].includes(c.role)))
+    assert.equal(container.closureGate, String(state.closure.enabled), `Closure runtime gate mismatch: ${container.role}`);
+  return current;
+}
+function readiness(state, includeClosure = false) {
+  for (const port of ports) execute(`Readiness ${port}`, 'curl', ['--fail', '--silent', '--show-error', '--retry', '20',
+    '--retry-delay', '3', '--retry-connrefused', '--connect-timeout', '2', '--max-time', '5', '--retry-max-time', '90',
+    `http://127.0.0.1:${port}/health/ready`]);
+  if (state.closure.enabled || includeClosure) {
+    const access = execute('Closure access capability', 'curl', ['--silent', '--show-error', '--connect-timeout', '2',
+      '--max-time', '5', '-o', '/dev/null', '-w', '%{http_code}', 'http://127.0.0.1:5300/api/v1/crm/access/workspace-closures']);
+    assert(['401', '403'].includes(access), 'Closure access capability unavailable');
+    for (const port of [4900, 4800, 5320, 5330, 5310, 4401]) {
+      const status = execute(`Closure fence capability ${port}`, 'curl', ['--silent', '--show-error', '--connect-timeout', '2',
+        '--max-time', '5', '-o', '/dev/null', '-w', '%{http_code}', '-X', 'POST', '-H', 'Content-Type: application/json',
+        '-H', 'x-aerocrm-service: crm-access', '--data', '{}', `http://127.0.0.1:${port}/internal/v1/workspace-closures/fence`]);
+      assert(['401', '403'].includes(status), `Closure fence capability unavailable: ${port}`);
+    }
+  }
+}
+function projections(state) {
+  atomic(`${releases}/backend.sha`, `${state.manifest.releaseSha}\n`);
+  if (state.closure.schemaAnchorSha) atomic(`${releases}/workspace-closure-compatible.sha`, `${state.closure.schemaAnchorSha}\n`);
+  if (state.closure.enabled) atomic(`${releases}/workspace-closure-enabled.sha`, `${state.manifest.releaseSha}\n`);
+  else fs.rmSync(`${releases}/workspace-closure-enabled.sha`, { force: true });
+}
+function applyConfiguration(state) {
+  validateSnapshot(state);
+  // Apply under the shared lock; stable host paths prevent unnecessary bind-mount changes.
+  const source = `${configDirectory(state)}/env/backend`;
+  fs.mkdirSync(`${root}/env/backend`, { recursive: true, mode: 0o700 });
+  const expected = fs.readdirSync(source);
+  for (const name of expected) atomic(`${root}/env/backend/${name}`, fs.readFileSync(`${source}/${name}`));
+  for (const name of fs.readdirSync(`${root}/env/backend`).filter(name => name.endsWith('.env')))
+    if (!expected.includes(name)) fs.rmSync(`${root}/env/backend/${name}`);
+  for (const name of ['backend.yml', 'rabbitmq.conf']) atomic(`${root}/compose/${name}`, fs.readFileSync(`${configDirectory(state)}/compose/${name}`));
+  // Persist per-service substitutions for legacy docker-compose invocations after adoption.
+  atomic(`${releases}/backend-images.env`, Object.entries({ IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) })
+    .map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
+}
+function compatibility(state) {
+  const modes = state.closure.enabled ? ['--closure-enabled'] : [];
+  const check = stopped => execute('Persisted backend contract compatibility', process.execPath,
+    [`${stagedRoot}/scripts/backend-rollback-compatibility-guard.mjs`, `${configDirectory(state)}/manifest.json`,
+      '--manifest', ...(stopped ? ['--writers-stopped'] : []), ...modes], { cwd: root });
+  try { check(false); return; } catch (error) { if (error.status !== 2) throw error; }
+  const writers = runtime().filter(c => c.running).map(c => c.id);
+  try {
+    if (writers.length) execute('Stop backend writers for compatibility', 'docker', ['stop', '-t', '30', ...writers]);
+    check(true);
+  } catch (error) {
+    // A schema hook or partial switch may have invalidated the original writers.
+    // Only the transaction's complete rollback compatibility check may authorize restarting them.
+    error.requiresRollback = true;
+    throw error;
+  }
+}
+function runMigrations() {
+  const hooks = [['billing-capacity-migration.mjs', billing, billingHash],
+    ['crm-custom-roles-migration.mjs', custom, customHash], ['crm-sales-commerce-migration.mjs', commerce, commerceHash],
+    ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash]];
+  for (const [name, enabled, hash] of hooks) if (enabled === 'true')
+    execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
+  if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
+    [`${stagedRoot}/scripts/workspace-closure-migration.mjs`, '--repair-identity-workspace-acl', sha, aclHash], { cwd: root });
+}
+function bootstrap() {
+  assert(uniformManifest(manifest), 'First canonical release requires force_full_backend CI');
+  const oldSha = readMarker('backend.sha');
+  assert(/^[a-f0-9]{40}$/.test(oldSha), 'Coherent legacy backend marker required');
+  const enabledSha = readMarker('workspace-closure-enabled.sha');
+  const anchor = readMarker('workspace-closure-compatible.sha') || null;
+  assert(!enabledSha || enabledSha === oldSha, 'Legacy closure markers disagree; fail closed');
+  assert(!anchor || /^[a-f0-9]{40}$/.test(anchor));
+  assert(!enabledSha || anchor, 'Enabled closure requires its schema anchor');
+  const legacyGate = closureGate(`${root}/env/backend`);
+  assert.equal(legacyGate, !!enabledSha, 'Legacy initial closure enable must finish before canonical adoption');
+  const services = {};
+  for (const app of apps) {
+    const object = JSON.parse(execute(`${app} baseline image`, 'docker', ['image', 'inspect', `aerocrm/${app}:${oldSha}`]))[0];
+    assert.equal(object.Config.Labels?.['org.opencontainers.image.revision'], oldSha);
+    services[app] = { sourceSha: oldSha, contextHash: zeroHash, imageId: object.Id, artifactSha256: zeroHash,
+      ciRunId: '0', artifactName: `image-${app}` };
+  }
+  const baseline = validateState({ schemaVersion: 1, manifest: { schemaVersion: 1, releaseSha: oldSha, ciRunId: '0', services },
+    // Legacy markers did not record infra provenance; this identifies the reviewed adopter, not a CI image origin.
+    infraSha: process.env.INFRA_SHA, envHash: envHash(`${root}/env/backend`), composeHash: composeHash(`${root}/compose`),
+    closure: { enabled: legacyGate, schemaAnchorSha: anchor } });
+  snapshot(baseline, `${root}/compose`, `${root}/env/backend`); verifyRuntime(baseline); readiness(baseline);
+  return baseline;
+}
+
+inspectImages(manifest);
+const canonical = fs.existsSync(stateFile) ? validateState(JSON.parse(fs.readFileSync(stateFile, 'utf8'))) : null;
+const pending = fs.existsSync(pendingFile) ? JSON.parse(fs.readFileSync(pendingFile, 'utf8')) : null;
+if (pending) {
+  validatePending(pending, canonical);
+  assert.equal(pending.target.manifest.releaseSha, sha, 'Pending release requires the exact original target SHA');
+}
+if (!pending) {
+  validateEnv(`${root}/env/backend`);
+  assert.equal(envHash(`${root}/env/backend`), expectedEnvHash, 'Active backend env hash mismatch');
+}
+const previous = pending?.previous ?? canonical ?? bootstrap();
+validateSnapshot(previous);
+assert.equal(pending ? pending.target.closure.enabled : closureGate(`${root}/env/backend`), previous.closure.enabled,
+  'Historical initial closure enable/disable must finish before adoption; canonical releases preserve the gate');
+const target = validateState({ schemaVersion: 1, manifest, infraSha: process.env.INFRA_SHA,
+  envHash: expectedEnvHash, composeHash: composeHash(`${stagedRoot}/compose`),
+  closure: { enabled: previous.closure.enabled,
+    schemaAnchorSha: closureMigration === 'true' ? sha : previous.closure.schemaAnchorSha } });
+assert(closureMigration !== 'true' || !target.closure.enabled, 'Closure schema migration requires gate OFF');
+assert(aclRepair !== 'true' || target.closure.enabled, 'Identity ACL repair requires closure gate ON');
+snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
+expectedConfigHashes(target);
+if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
+if (canonical && stateKey(canonical) === stateKey(target)) {
+  verifyRuntime(target); readiness(target, closureMigration === 'true');
+  applyConfiguration(target); projections(target); fs.rmSync(pendingFile, { force: true });
+  fs.rmSync(`${releases}/backend-rollback-blocked.pending`, { force: true });
+  console.log('Backend release already committed; validated runtime and repaired projections without restarting containers');
+  process.exit(0);
+}
+const before = verifyRuntime(previous, pending ? target : null, !!pending);
+console.log(JSON.stringify({ releaseSha: sha, changedApps: compositionDiff(previous.manifest, manifest),
+  configurationChanged: previous.envHash !== target.envHash || previous.composeHash !== target.composeHash,
+  before: before.map(({ role, id }) => ({ role, id })) }));
+// The journal is durable before hooks can stop writers or mutate the schema.
+writeJson(previousFile, previous);
+writeJson(pendingFile, { schemaVersion: 1, target, previous, phase: 'switching' });
+let after;
+const outcome = runReleaseTransaction({
+  migrate: runMigrations,
+  compatibility: () => compatibility(target),
+  applyConfiguration: () => applyConfiguration(target),
+  switchImages: () => {
+    if (digest(fs.readFileSync(`${configDirectory(previous)}/compose/rabbitmq.conf`)) !==
+        digest(fs.readFileSync(`${configDirectory(target)}/compose/rabbitmq.conf`)))
+      compose(target, ['up', '-d', '--no-deps', '--force-recreate', 'rabbitmq']);
+    compose(target, ['up', '-d', '--remove-orphans']);
+  },
+  validateTarget: () => {
+    inspectImages(manifest); after = verifyRuntime(target); readiness(target, closureMigration === 'true');
+  },
+  commit: () => writeJson(stateFile, target),
+  project: () => { applyConfiguration(target); projections(target); },
+  clearPending: () => {
+    fs.rmSync(pendingFile, { force: true });
+    fs.rmSync(`${releases}/backend-rollback-blocked.pending`, { force: true });
+  },
+  report: error => console.error(error.message),
+  isCommitted: () => fs.existsSync(stateFile) &&
+    stateKey(validateState(JSON.parse(fs.readFileSync(stateFile, 'utf8')))) === stateKey(target),
+  validatePrevious: () => verifyRuntime(previous),
+  rollback: () => {
+    inspectImages(previous.manifest); compatibility(previous);
+    applyConfiguration(previous);
+    if (digest(fs.readFileSync(`${configDirectory(previous)}/compose/rabbitmq.conf`)) !==
+        digest(fs.readFileSync(`${configDirectory(target)}/compose/rabbitmq.conf`)))
+      compose(previous, ['up', '-d', '--no-deps', '--force-recreate', 'rabbitmq']);
+    compose(previous, ['up', '-d', '--remove-orphans']); verifyRuntime(previous); readiness(previous);
+    writeJson(stateFile, previous); projections(previous);
+    console.error('Previous complete backend composition and configuration restored; database changes preserved');
+  },
+  blockRollback: error => {
+    atomic(`${releases}/backend-rollback-blocked.pending`, `${sha}\n`);
+    console.error(`Automatic rollback blocked: ${error.message}. Repeat the exact target workflow; keep compatible writers.`);
+  }
+}, { migrationRequested });
+if (outcome.status !== 'committed') {
+  if (outcome.status === 'projection-repair-required')
+    console.error('Canonical release committed; repeat exact target to repair its projections');
+  process.exit(1);
+}
+console.log(JSON.stringify({ releaseSha: sha, after: after.map(({ role, id }) => ({ role, id })),
+  retainedContainerIds: before.filter(c => after.some(next => next.role === c.role && next.id === c.id)).map(c => c.role) }));

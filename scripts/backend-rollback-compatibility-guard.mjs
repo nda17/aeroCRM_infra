@@ -6,6 +6,16 @@ import fs from 'node:fs';
 import { parseEnv } from 'node:util';
 
 const [candidateSha, ...modes] = process.argv.slice(2);
+const manifestMode = modes.includes('--manifest');
+const candidateManifest = manifestMode ? JSON.parse(fs.readFileSync(candidateSha, 'utf8')) : null;
+function candidateImage(service) {
+  const entry = candidateManifest?.services[service];
+  if (entry) {
+    assert.equal(run(`${service} immutable image`, 'docker', ['image', 'inspect', '--format', '{{.Id}}', `aerocrm/${service}:${entry.sourceSha}`]), entry.imageId);
+    return `aerocrm/${service}:${entry.sourceSha}`;
+  }
+  return `aerocrm/${service}:${candidateSha}`;
+}
 const writersStopped = modes.includes('--writers-stopped');
 const closureEnabled = modes.includes('--closure-enabled');
 const billingEnvFile = '/opt/aerocrm/env/migrations/billing.env';
@@ -136,19 +146,23 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
 
 assert.equal(process.platform, 'linux', 'Backend compatibility guard must run on Linux host');
 assert.equal(fs.realpathSync('.'), '/opt/aerocrm', 'Run from /opt/aerocrm');
-assert(modes.length <= 2 && new Set(modes).size === modes.length &&
-  modes.every(mode => ['--writers-stopped', '--closure-enabled'].includes(mode)),
+assert(modes.length <= 3 && new Set(modes).size === modes.length &&
+  modes.every(mode => ['--writers-stopped', '--closure-enabled', '--manifest'].includes(mode)),
   'Expected candidate exact SHA and optional compatibility modes');
-assert(/^[a-f0-9]{40}$/.test(candidateSha), 'Candidate exact SHA required');
+assert(manifestMode || /^[a-f0-9]{40}$/.test(candidateSha), 'Candidate exact SHA required');
+if (manifestMode) {
+  const { validateManifest } = await import('./backend-release-state.mjs');
+  validateManifest(candidateManifest);
+}
 
 if (closureEnabled) {
   for (const service of closureOwners)
-    assert(closureImageReviewed(service, candidateSha),
+    assert(closureImageReviewed(service, candidateManifest?.services[service].sourceSha ?? candidateSha),
       `Candidate ${service} image does not match reviewed workspace closure migrations and ACL`);
 }
 
 const closureCapabilities = closureOwners.map(service => imageCapabilities(
-  `aerocrm/${service}:${candidateSha}`, [closureMigration],
+  candidateImage(service), [closureMigration],
   { [closureMigration]: closureInventory.owners[service].migrations[closureMigration] }
 )[0]);
 assert(closureCapabilities.every(value => typeof value === 'boolean'), 'Candidate closure inventory is invalid');
@@ -179,15 +193,15 @@ if (!closureCapabilities.every(Boolean)) {
   }
 }
 
-const crmCapabilities = imageCapabilities(`aerocrm/crm-access:${candidateSha}`, [
+const crmCapabilities = imageCapabilities(candidateImage('crm-access'), [
   '20260921020000_add_crm_custom_member_role',
   '20260921020100_crm_custom_roles',
   '20260921030100_crm_admin_seat_capacity'
 ]);
-const billingCapabilities = imageCapabilities(`aerocrm/billing:${candidateSha}`, [
+const billingCapabilities = imageCapabilities(candidateImage('billing'), [
   '20260921030000_crm_admin_seat_adjustments'
 ]);
-const salesCapabilities = imageCapabilities(`aerocrm/crm-sales:${candidateSha}`, [commerceMigration], {
+const salesCapabilities = imageCapabilities(candidateImage('crm-sales'), [commerceMigration], {
   [commerceMigration]: commerceChecksum
 });
 assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
