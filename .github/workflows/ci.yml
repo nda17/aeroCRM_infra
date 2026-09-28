@@ -26,6 +26,25 @@ jobs:
           bash scripts/release.sh --policy-self-test
           node scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           node scripts/workspace-closure-enable.mjs --policy-self-test
+      - name: Match production Docker image store
+        uses: docker/setup-docker-action@v5
+        with:
+          version: 'v29.8.1'
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+      - name: Match production Docker Compose
+        uses: docker/setup-compose-action@v2
+        with:
+          version: 'v5.5.1'
+      - name: Verify production Docker versions
+        run: |
+          test "$(docker version --format '{{.Server.Version}}')" = '29.8.1'
+          compose_version=$(docker compose version --short)
+          test "${compose_version#v}" = '5.5.1'
       - name: Verify Compose preserves unaffected containers
         env:
           REQUIRE_DOCKER_COMPOSE_TEST: 'true'

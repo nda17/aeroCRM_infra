@@ -59,6 +59,22 @@ test('Docker Compose changes selected app process roles, retains other container
       '--file', dockerfile, fixture], { stdio: 'inherit' });
   }
 
+  // Production receives saved artifacts, so provenance binds the imported image ID.
+  const tags = apps.flatMap(app => [`aerocrm/${app}:${oldSha}`, `aerocrm/${app}:${newSha}`]);
+  const archive = path.join(fixture, 'backend-images.tar');
+  run(['image', 'save', '--output', archive, ...tags], { stdio: 'inherit' });
+  run(['image', 'rm', ...tags], { stdio: 'inherit' });
+  run(['image', 'load', '--input', archive], { stdio: 'inherit' });
+  const importedIds = Object.fromEntries(tags.map(tag => {
+    const id = JSON.parse(run(['image', 'inspect', tag]))[0].Id;
+    assert.match(id, /^sha256:[a-f0-9]{64}$/);
+    return [tag, id];
+  }));
+  run(['image', 'rm', ...tags], { stdio: 'inherit' });
+  run(['image', 'load', '--input', archive], { stdio: 'inherit' });
+  for (const tag of tags) assert.equal(JSON.parse(run(['image', 'inspect', tag]))[0].Id, importedIds[tag],
+    `re-importing the same artifact must preserve its immutable image identity: ${tag}`);
+
   const compose = (env, action) => run(['compose', '-p', project, '-f', composeFile, ...action], {
     env: { ...variables(newSha), ...env }, stdio: 'pipe'
   });
@@ -66,6 +82,10 @@ test('Docker Compose changes selected app process roles, retains other container
     const id = compose({}, ['ps', '-q', role]).trim();
     assert.match(id, /^[a-f0-9]{64}$/, `Compose did not report a running ${role} container`);
     const container = JSON.parse(run(['inspect', id]))[0];
+    const loaded = JSON.parse(run(['image', 'inspect', container.Config.Image]))[0];
+    assert.equal(loaded.Id, importedIds[container.Config.Image], 'Runtime tag must resolve to its imported artifact identity');
+    assert.equal(container.Image, loaded.Id, 'Running container and imported image inspect IDs must match exactly');
+    assert.equal(loaded.Config.Labels['org.opencontainers.image.revision'], container.Config.Image.split(':').at(-1));
     return [role, { id, image: container.Config.Image, imageId: container.Image,
       running: container.State.Running, inspection: container }];
   }));
