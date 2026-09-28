@@ -23,7 +23,10 @@ jobs:
           node --check scripts/backend-release-state.mjs
           node --check scripts/backend-release-transaction.mjs
           node --check scripts/backend-mail-env.mjs
+          node --check scripts/backend-image-inventory.mjs
+          node --check scripts/backend-image-cleanup.mjs
           node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs scripts/backend-mail-env.test.mjs
+          node --test scripts/backend-image-cleanup.test.mjs
           bash scripts/release.sh --policy-self-test
           node scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           node scripts/workspace-closure-enable.mjs --policy-self-test

@@ -143,6 +143,55 @@ path with historical closure/cutover or unrelated migration hooks.
 Missing S3, an allowed live mailbox, and a verified IMAP/SMTP roundtrip remain
 acceptance limits. A disabled deployment does not constitute mail enablement.
 
+## Reviewed backend image cleanup
+
+Cleanup runs separately through the monorepo `release-backend-image-cleanup.yml` workflow,
+using the same `aerocrm-production-release` concurrency group as deployment.
+The frozen approval artifact is `scripts/backend-image-cleanup-reviewed.json`:
+105 exact unused backend image IDs and the 27 retained images from the reviewed
+28 September inventory. Its unchanged SHA-256 is
+`951c3cbdc4894e31941f084c98afe2058acf4ed474336b752346698717aaec3a`.
+The artifact retains the original read-only note; the owner's subsequent explicit
+approval authorizes only this listed cleanup. It does not authorize a newly
+calculated candidate set.
+
+Dispatch from production with `sha` equal to the current workflow commit,
+`ci_run_id` for its green exact-SHA monorepo CI, the reviewed `infra_sha`, and
+`approved_inventory_hash` above. Before dispatch the operator separately verifies
+green exact-SHA Infrastructure CI and records its run ID in the release handoff.
+The workflow uses the existing infra SSH deploy key for pinned checkout and runs
+cleanup regression tests; it does not claim a cross-repository Actions API guard
+for Infrastructure CI. No new GitHub API credential is required.
+
+The staged controller holds `/opt/aerocrm/release.lock` throughout inventory,
+deletion and postflight. Before its first deletion, every reviewed candidate and
+retained identity/tag/revision/size/reason must match the current inventory.
+Canonical, previous, both pending states, schema anchors, legacy markers, and
+all stopped/running containers protect their images. A legacy cutover marker,
+including an empty one, blocks cleanup. The controller also records hashes and
+presence of release files, exact container references, and every installed image
+ID, including dangling images, in a durable private journal.
+
+Before each deletion it rechecks that fingerprint and the complete expected
+image inventory. Its only mutation command is
+`docker image rm --no-prune <one-reviewed-image-id>`, without force; containers,
+volumes, tags outside the approved image, databases and broker are not deleted.
+Any unexplained drift stops further deletion. One in-flight ID is journaled
+before Docker runs and its actual absence is checked before recording completion.
+After interruption, rerun the same approved hash and infra SHA: an absent in-flight
+ID may reconcile the lost response only when every other reference and installed
+ID matches the exact expected post-delete state. Unexpected absence, retagging,
+reappearance or extra images require review; no automatic reload or new selection
+is attempted.
+
+The completed journal and deterministic report remain in
+`releases/backend-image-cleanup/<approval-hash>.json` and `.report.json`. CI uploads
+the public report with removed IDs, protected references, remaining inventory,
+and total/free/available filesystem bytes for `/opt/aerocrm`, Docker data and
+containerd data where present. Image sizes share layers and do not predict freed
+space. Repeat the ordinary release capacity gate before delivering new images;
+cleanup does not relax its reserve or release checks.
+
 Fresh database bootstrap precedes writers: apply each service migration with its migration role, apply/verify ACLs, bootstrap service administrators and commercial policy, then service-owned settings. Database and broker roles use credentials dedicated to this deployment.
 
 Database backups go to private S3. The Ed25519 private signing key is mounted only into the maintenance worker. Restore stays disabled until the separate S3 admission/shared-cluster recovery requirements are fulfilled.
