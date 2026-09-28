@@ -312,10 +312,12 @@ snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
 expectedConfigHashes(target);
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 if (canonical && stateKey(canonical) === stateKey(target)) {
-  verifyRuntime(target); readiness(target, closureMigration === 'true');
+  const retained = verifyRuntime(target); readiness(target, closureMigration === 'true');
   applyConfiguration(target); projections(target); fs.rmSync(pendingFile, { force: true });
   fs.rmSync(`${releases}/backend-rollback-blocked.pending`, { force: true });
-  console.log('Backend release already committed; validated runtime and repaired projections without restarting containers');
+  const unchanged = retained.map(({ role, id }) => ({ role, id }));
+  console.log(JSON.stringify({ releaseSha: sha, changedApps: [], noSwitch: true, before: unchanged, after: unchanged,
+    retainedContainerIds: retained.map(container => container.role) }));
   process.exit(0);
 }
 const before = verifyRuntime(previous, pending ? target : null, !!pending);

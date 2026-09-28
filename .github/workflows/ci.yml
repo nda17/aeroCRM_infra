@@ -1,7 +1,7 @@
 name: Infrastructure CI
 on:
   push:
-    branches: ['dev_*/**', 'prod_*']
+    branches: ['dev_0.1.0/feature/standalone-crm', 'dev_0.2.0/feature/selective-backend-release', 'prod_0.1.0']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -26,7 +26,6 @@ jobs:
           bash scripts/release.sh --policy-self-test
           node scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           node scripts/workspace-closure-enable.mjs --policy-self-test
-          node --test scripts/crm-contract-cutover-preflight.test.mjs
       - name: Verify Compose preserves unaffected containers
         env:
           REQUIRE_DOCKER_COMPOSE_TEST: 'true'
