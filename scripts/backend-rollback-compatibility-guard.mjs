@@ -27,6 +27,7 @@ const closureOwners = ['crm-access', 'identity', 'billing', 'crm-customers', 'cr
 const closureInventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure-reviewed-inventory.json', import.meta.url)));
 const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
+const mailWorkspaceMigration = '20260929000000_mail_workspace';
 const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
 const commerceBusinessDataTables = [
   'commerce_catalog_items', 'commerce_deal_lines', 'commerce_commands',
@@ -58,7 +59,7 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
 function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
   const accepted = service === 'crm-customers'
-    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers] : [expected];
+    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -93,6 +94,16 @@ function assertNoMailData(state) {
   assert.equal(state.mailData, false,
     'Old Customers image cannot protect persisted mail data/jobs/admitted sends; disable admission via CI/CD and retain compatible outcome workers');
 }
+function mailWorkspaceDataQuery() {
+  return `SELECT json_build_object('mailWorkspaceData',
+    EXISTS (SELECT 1 FROM crm_customers.mail_send_intents WHERE contact_id IS NULL OR scope_message_id IS NOT NULL OR html IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM crm_customers.mail_attachments WHERE message_id IS NULL AND upload_actor IS NOT NULL AND contact_id IS NULL))::text;`;
+}
+function assertNoMailWorkspaceData(state) {
+  assert.equal(state.mailWorkspaceData, false,
+    'Old Customers image cannot protect persisted standalone mail; retain a compatible image and fix forward');
+}
+
 function readDatabaseUrl(file, key, identity) {
   const stat = fs.lstatSync(file);
   assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600 &&
@@ -159,11 +170,19 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(Object.keys(mailInventory.mailTables).length, 14);
   assertNoMailData({ mailData: false });
   assert.throws(() => assertNoMailData({ mailData: true }), /cannot protect persisted mail data/);
+  const workspaceQuery = mailWorkspaceDataQuery();
+  assert(workspaceQuery.includes('contact_id IS NULL'));
+  assert(workspaceQuery.includes('scope_message_id IS NOT NULL'));
+  assert(workspaceQuery.includes('upload_actor IS NOT NULL'));
+  assertNoMailWorkspaceData({ mailWorkspaceData: false });
+  assert.throws(() => assertNoMailWorkspaceData({ mailWorkspaceData: true }), /cannot protect persisted standalone mail/);
+  assert.throws(() => assertNoMailWorkspaceData({}), /cannot protect persisted standalone mail/);
   const customers = closureInventory.owners['crm-customers'];
   const legacy = mailInventory.legacyClosureCustomers;
   const previous = mailInventory.previousMailCustomers;
   const previousNotifications = mailInventory.previousNotificationsCustomers;
-  const reviewedPairs = [customers, legacy, previous, previousNotifications];
+  const previousWorkspace = mailInventory.previousWorkspaceCustomers;
+  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace];
   const reviewCustomers = (pair, crossAcl = false) => {
     let calls = 0;
     const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {
@@ -185,10 +204,12 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(legacy), true);
   assert.equal(reviewCustomers(previous), true);
   assert.equal(reviewCustomers(previousNotifications), true);
+  assert.equal(reviewCustomers(previousWorkspace), true);
   assert.equal(reviewCustomers(customers, true), false);
   assert.equal(reviewCustomers(legacy, true), false);
   assert.equal(reviewCustomers(previous, true), false);
   assert.equal(reviewCustomers(previousNotifications, true), false);
+  assert.equal(reviewCustomers(previousWorkspace, true), false);
   console.log('Backend rollback policy fixtures verified');
   process.exit(0);
 }
@@ -256,6 +277,10 @@ const salesCapabilities = imageCapabilities(candidateImage('crm-sales'), [commer
 const mailCapabilities = imageCapabilities(candidateImage('crm-customers'), [mailMigration], {
   [mailMigration]: mailInventory.migrations[mailMigration]
 });
+const mailWorkspaceCapabilities = imageCapabilities(candidateImage('crm-customers'), [mailWorkspaceMigration], {
+  [mailWorkspaceMigration]: mailInventory.migrations[mailWorkspaceMigration]
+});
+assert(mailWorkspaceCapabilities.length === 1 && typeof mailWorkspaceCapabilities[0] === 'boolean');
 assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
   salesCapabilities.length === 1 && mailCapabilities.length === 1 &&
   [...crmCapabilities, ...billingCapabilities, ...salesCapabilities].every(value => typeof value === 'boolean'),
@@ -263,13 +288,22 @@ assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
 assert(typeof mailCapabilities[0] === 'boolean', 'Invalid mail image compatibility inventory');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
-if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0]) {
+if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] && mailWorkspaceCapabilities[0]) {
   console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
   console.error('Candidate backend images require a stopped-writer data compatibility check');
   process.exit(2);
+}
+
+if (!mailWorkspaceCapabilities[0]) {
+  const customers = readDatabaseUrl('/opt/aerocrm/env/migrations/crm-customers.env', 'CRM_CUSTOMERS_DATABASE_URL', {
+    database: 'aerocrm_crm_customers', role: 'aerocrm_crm_customers_migration', schema: 'crm_customers'
+  });
+  const applied = inspectDatabase(customers, `SELECT EXISTS (SELECT 1 FROM crm_customers._prisma_migrations
+    WHERE migration_name='${mailWorkspaceMigration}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL)::text;`);
+  if (applied) assertNoMailWorkspaceData(inspectDatabase(customers, mailWorkspaceDataQuery()));
 }
 
 if (!mailCapabilities[0]) {
