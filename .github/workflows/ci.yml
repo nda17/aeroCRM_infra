@@ -1,7 +1,7 @@
 name: Infrastructure CI
 on:
   push:
-    branches: ['dev_0.1.0/feature/standalone-crm', 'dev_0.2.0/feature/selective-backend-release', 'prod_0.1.0']
+    branches: ['dev_0.1.0/feature/standalone-crm', 'dev_0.2.0/feature/selective-backend-release', 'dev_0.3.0/feature/draft-protection-and-corporate-mail', 'prod_0.1.0']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -22,7 +22,8 @@ jobs:
           node --check scripts/backend-release.mjs
           node --check scripts/backend-release-state.mjs
           node --check scripts/backend-release-transaction.mjs
-          node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs
+          node --check scripts/backend-mail-env.mjs
+          node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs scripts/backend-mail-env.test.mjs
           bash scripts/release.sh --policy-self-test
           node scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           node scripts/workspace-closure-enable.mjs --policy-self-test

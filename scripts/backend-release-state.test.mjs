@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apps, roles, validateManifest, validateState, validatePending, compositionDiff, uniformManifest,
-  imageVariables, stateKey, assertRuntime, assertEffectiveConfig } from './backend-release-state.mjs';
+import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, validatePending,
+  compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig }
+  from './backend-release-state.mjs';
 
 const sha = char => char.repeat(40);
 const hash = char => char.repeat(64);
@@ -159,6 +160,48 @@ test('runtime rejects missing, duplicate, stopped, and unsupported rollback role
   assert.throws(() => assertRuntime(current, runtime, previous), /Unexpected immutable runtime image/);
   const rollbackRuntime = runtimeFor(previous);
   assert.equal(assertRuntime(current, rollbackRuntime, previous), true);
+});
+
+test('snapshot-derived plans retain 30 historical roles and require both workers and readiness ports for the 32-role target', () => {
+  const historical = Object.fromEntries(Object.values(roles).flat().map(role => [role, {}]));
+  delete historical['crm-customers-mail-sync'];
+  delete historical['crm-customers-mail-send'];
+  const target = { ...historical, 'crm-customers-mail-sync': {}, 'crm-customers-mail-send': {} };
+  assert.equal(Object.values(rolesForPlan(historical)).flat().length, 30);
+  assert.equal(Object.values(rolesForPlan(target, true)).flat().length, 32);
+  assert(portsForPlan(target).includes(5321) && portsForPlan(target).includes(5322));
+  assert.throws(() => rolesForPlan({ ...historical, 'crm-customers-mail-sync': {} }), /must be paired/);
+  assert.throws(() => rolesForPlan(historical, true), /requires both mail process roles/);
+});
+
+test('pending 30-to-32 role transition resumes a partial worker addition and requires the complete stable target', () => {
+  const targetManifest = manifest({ release: sha('f'), run: '202' });
+  const previousManifest = manifest({ release: sha('a'), run: '101' });
+  const targetServices = Object.fromEntries(Object.values(roles).flat().map(role => [role, {}]));
+  const previousServices = { ...targetServices };
+  delete previousServices['crm-customers-mail-sync'];
+  delete previousServices['crm-customers-mail-send'];
+  const targetRoles = rolesForPlan(targetServices, true);
+  const previousRoles = rolesForPlan(previousServices);
+  const oldRuntime = runtimeFor(previousManifest).filter(({ role }) =>
+    role !== 'crm-customers-mail-sync' && role !== 'crm-customers-mail-send');
+  const newRuntime = runtimeFor(targetManifest);
+  assert.equal(assertRuntime(targetManifest, oldRuntime, previousManifest, true, targetRoles, previousRoles), true);
+  assert.equal(assertRuntime(targetManifest, newRuntime, previousManifest, true, targetRoles, previousRoles), true);
+  const syncWorker = newRuntime.find(({ role }) => role === 'crm-customers-mail-sync');
+  assert.equal(assertRuntime(targetManifest, [...oldRuntime, syncWorker], previousManifest, true,
+    targetRoles, previousRoles), true);
+  assert.throws(() => assertRuntime(targetManifest, [...oldRuntime, syncWorker], null, false, targetRoles), /roles differ/);
+  const previousImageWorker = runtimeFor(previousManifest).find(({ role }) => role === 'crm-customers-mail-sync');
+  assert.throws(() => assertRuntime(targetManifest, [...oldRuntime, previousImageWorker], previousManifest, true,
+    targetRoles, previousRoles), /immutable runtime image|role inventory/i);
+  assert.throws(() => rolesForPlan({ ...previousServices, 'crm-customers-mail-sync': {} }), /must be paired/);
+  assert.throws(() => assertRuntime(targetManifest, [...oldRuntime,
+    { ...newRuntime[0], role: 'crm-customers-mail-preview' }], previousManifest, true,
+    targetRoles, previousRoles), /reviewed inventories/);
+  const interruptedRemoval = [...oldRuntime, newRuntime.find(({ role }) => role === 'crm-customers-mail-send')];
+  assert.equal(assertRuntime(previousManifest, interruptedRemoval, targetManifest, true,
+    previousRoles, targetRoles), true);
 });
 
 test('migration gate can distinguish a uniform full release from a mixed baseline', () => {

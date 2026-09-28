@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "migrations": {
+    "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
+    "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c",
+    "20260928000000_corporate_mail": "0f21487e131384fef83494d962f474545523ee1a215c5ae1a5928f436919e05f"
+  },
+  "aclSha256": "d6a0aeedee8da3513e0d5805b51fefd1ecff80170a2fa085caa11a297ea24642",
+  "mailTables": {
+    "mail_connections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_mailboxes": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_mailbox_grants": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_folders": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_messages": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_contact_links": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_attachments": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_send_intents": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_send_attachments": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_jobs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_audit": [
+      "SELECT",
+      "INSERT"
+    ]
+  },
+  "mailTriggerCount": 12,
+  "legacyClosureCustomers": {
+    "migrations": {
+      "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
+      "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c"
+    },
+    "aclSha256": "478caa28711e6558b12fe23fe2e69fced50aab05869bac5dffa2347d9b451333",
+    "closureRoutines": [
+      "assert_workspace_open(uuid)",
+      "guard_workspace_business_write()",
+      "workspace_closure_fence_immutable()"
+    ],
+    "closureTriggerCount": 4
+  }
+}

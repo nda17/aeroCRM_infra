@@ -36,7 +36,7 @@ Compose/RabbitMQ configuration. Active Compose paths stay stable; image substitu
 live in `releases/backend-images.env`, passed explicitly with `docker compose --env-file`.
 The host's unrelated `.env` file is preserved.
 
-After all 30 readiness endpoints, immutable runtime identities and enabled closure
+After the snapshot's reviewed readiness endpoints (30 historically, 32 with mail), immutable runtime identities and enabled closure
 capability checks pass, one atomic write commits `releases/backend-state.json`.
 This canonical document contains the CI manifest, infra SHA, env/compose hashes and
 closure enabled/schema-anchor state. `backend.sha` and closure marker files are derived
@@ -66,6 +66,77 @@ configuration retains its container and stable bind path.
 Infrastructure CI runs strict manifest/runtime fixtures, interrupted-switch and rollback
 fixtures, existing policy checks and a real Docker Compose container-retention regression.
 Production release continues exclusively through the GitHub workflow.
+
+## Corporate mail configuration and release
+
+Use `aeroCRM_monorepo/.github/workflows/corporate-mail-release.yml` for the backend.
+The first release uses a green uniform full manifest, `apply_migration=true`, and
+`crm_customers_migration_env_hash` for the existing private
+`/opt/aerocrm/env/migrations/crm-customers.env`. To install the missing workers' env
+and API mail configuration, also set `install_env=true`,
+`backend_env_before_hash`, `mail_env_bundle_hash`, and `backend_env_hash` (the approved
+aggregate **after** the change). Later config/enable releases use
+`apply_migration=false` with an empty migration hash and retain `install_env=true`.
+An image-only release uses `install_env=false` and leaves both scoped hashes empty.
+Frontend release follows successful backend readiness at the same approved SHA.
+
+Prepare only from approved private input and the existing runtime credentials;
+do not regenerate database/service credentials or an existing mail encryption key.
+With all three mail gates explicitly `false`, the three Customers roles can start
+without S3 or encryption settings. Enabling requires a valid 32-byte base64 key/id
+and complete private S3 configuration, with a separate access key restricted to
+`mail/*`. Backup, Support and avatar access keys cannot be reused. Verify the real
+bucket policy separately; configuration validation does not prove its permissions.
+An existing mail encryption key and key id cannot be removed or rotated by this path.
+
+From this infra checkout, render and create a private canonical three-file bundle:
+
+```bash
+umask 077
+node scripts/render-env.mjs
+node scripts/backend-mail-env.mjs --bundle ../.deploy/env/backend ../.deploy/crm-customers-mail-env.json
+gh secret set CRM_CUSTOMERS_MAIL_ENV_BUNDLE --repo nda17/aeroCRM_monorepo < ../.deploy/crm-customers-mail-env.json
+```
+
+The helper prints only the bundle SHA-256 and reviewed filenames. GitHub reads the
+secret from stdin; never paste its contents into workflow inputs, logs, or artifacts.
+The existing reusable workflow inherits repository secrets, so this secret lives in
+the monorepo repository. Local `sync-env.mjs` is not a mail install/enable path.
+
+For both aggregate hashes, use the existing release algorithm from the corresponding
+private backend directory (GNU `sha256sum`/`sort` are required):
+
+```bash
+find . -maxdepth 1 -type f -name '*.env' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1
+```
+
+The before directory must be a verified private copy of the current VPS env,
+matching its read-only aggregate hash. Build a local candidate from that copy with
+the same scoped validation used by the controller; supply absolute private paths:
+
+```bash
+node --input-type=module - /absolute/bundle.json BUNDLE_SHA256 /absolute/before-env /absolute/new-candidate <<'NODE'
+import { stageMailEnvironment } from './scripts/backend-mail-env.mjs';
+const [bundleFile, bundleHash, sourceDirectory, candidateDirectory] = process.argv.slice(2);
+stageMailEnvironment({ bundleFile, bundleHash, sourceDirectory, candidateDirectory });
+NODE
+```
+
+Compute the after aggregate in `new-candidate` and review both hashes and the scoped
+change before dispatch. Only three fixed Customers files can differ; canonical env
+rows reject duplicate keys and unreviewed mail fields. All unrelated API/worker
+settings and existing keys are preserved. CI stages the pinned bundle privately
+with mode 0600. Under the same `release.lock`, the controller builds the target
+snapshot from the immutable previous env, checks before/bundle/after hashes, and
+records the existing durable journal before applying live configuration. Its
+guarded rollback restores the previous complete env and process inventory while
+preserving additive database changes. A pending 30-to-32 switch may temporarily
+have one new worker; only the exact reviewed target can resume it, and final
+readiness/runtime verification still requires both workers. Do not combine this
+path with historical closure/cutover or unrelated migration hooks.
+
+Missing S3, an allowed live mailbox, and a verified IMAP/SMTP roundtrip remain
+acceptance limits. A disabled deployment does not constitute mail enablement.
 
 Fresh database bootstrap precedes writers: apply each service migration with its migration role, apply/verify ACLs, bootstrap service administrators and commercial policy, then service-owned settings. Database and broker roles use credentials dedicated to this deployment.
 

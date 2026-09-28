@@ -71,7 +71,7 @@ const roles = [
   ['crm-access', 'api', 5300], ['crm-access', 'worker', 5301], ['crm-access', 'outbox-publisher', 5302],
   ['crm-intake', 'api', 5310], ['crm-intake', 'worker', 5311], ['crm-intake', 'publisher', 5312],
   ['crm-intake', 'sla-worker', 5317], ['crm-intake', 'sla-publisher', 5318],
-  ['crm-customers', 'api', 5320], ['crm-sales', 'api', 5330], ['crm-sales', 'reminders', 5331],
+  ['crm-customers', 'api', 5320], ['crm-customers', 'mail-sync', 5321], ['crm-customers', 'mail-send', 5322], ['crm-sales', 'api', 5330], ['crm-sales', 'reminders', 5331],
 ];
 const services = [...new Set(roles.map(([service]) => service))];
 for (const [service, role, port, explicit] of roles) {
@@ -87,7 +87,7 @@ for (const [service, role, port, explicit] of roles) {
     : service === 'crm-sales' && role === 'reminders' ? 'CRM_SALES_REMINDERS_PORT'
     : rolePorts ? `${prefix}_${role.replaceAll('-', '_').toUpperCase()}_PORT` : `${prefix}_PORT`;
   env[portKey] = String(port);
-  if (!['api', 'scheduler'].includes(role)) {
+  if (!['api', 'scheduler'].includes(role) && service !== 'crm-customers') {
     Object.assign(env, { RABBITMQ_URL: broker(runtime), RABBITMQ_CONNECTION_NAME: `aerocrm-${runtime}`,
       RABBITMQ_ASSERT_TOPOLOGY: 'false', RABBITMQ_MAX_MESSAGE_BYTES: '262144' });
   }
@@ -174,9 +174,20 @@ for (const [service, role, port, explicit] of roles) {
       delete env.RABBITMQ_URL;
     }
   }
-  if (service === 'crm-customers') Object.assign(env, base('CRM_ACCESS'), tokens(['CRM_ACCESS_CRM_CUSTOMERS_TOKEN',
-    'CRM_CUSTOMERS_CRM_INTAKE_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN', 'CRM_CUSTOMERS_CRM_ACCESS_TOKEN']),
-    providers(['CRM_CUSTOMERS_DADATA_API_KEY']));
+  if (service === 'crm-customers') {
+    Object.assign(env, base('CRM_ACCESS'), tokens(['CRM_ACCESS_CRM_CUSTOMERS_TOKEN',
+      'CRM_CUSTOMERS_CRM_INTAKE_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN', 'CRM_CUSTOMERS_CRM_ACCESS_TOKEN']),
+      isApi ? providers(['CRM_CUSTOMERS_DADATA_API_KEY']) : {}, {
+        CRM_MAIL_ENABLED: booleanInput('CRM_MAIL_ENABLED'),
+        CRM_MAIL_SYNC_ENABLED: booleanInput('CRM_MAIL_SYNC_ENABLED'),
+        CRM_MAIL_SEND_ENABLED: booleanInput('CRM_MAIL_SEND_ENABLED')
+      });
+    // Mail credentials are independent of existing notification SMTP/Support S3.
+    for (const key of ['CRM_MAIL_CREDENTIAL_KEY_ID', 'CRM_MAIL_CREDENTIAL_KEY', 'CRM_MAIL_S3_ENDPOINT',
+      'CRM_MAIL_S3_REGION', 'CRM_MAIL_S3_BUCKET', 'CRM_MAIL_S3_ACCESS_KEY_ID',
+      'CRM_MAIL_S3_SECRET_ACCESS_KEY', 'CRM_MAIL_S3_FORCE_PATH_STYLE'])
+      if (input[key]?.trim()) env[key] = input[key];
+  }
   if (service === 'crm-sales') Object.assign(env, base('CRM_ACCESS'), base('CRM_CUSTOMERS'), base('NOTIFICATION_DELIVERY'), tokens([
     'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN', 'CRM_SALES_CRM_ACCESS_TOKEN', 'CRM_SALES_CRM_INTAKE_TOKEN',
     'CRM_SALES_NOTIFICATION_DELIVERY_TOKEN', 'NOTIFICATION_DELIVERY_CRM_SALES_TOKEN']), { CRM_TASK_REMINDERS_ENABLED: 'true' });

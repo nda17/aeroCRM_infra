@@ -7,10 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
-import { apps, roles, ports, validateManifest, validateState, uniformManifest, compositionDiff,
+import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, uniformManifest, compositionDiff,
   imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
+import { stageMailEnvironment } from './backend-mail-env.mjs';
 
 const root = '/opt/aerocrm';
 const script = fileURLToPath(import.meta.url);
@@ -25,21 +26,21 @@ if (args[0] !== '--locked') {
 args.shift();
 const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
   commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
-  closureHash = '', aclRepair = 'false', aclHash = ''] = args;
+  closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = ''] = args;
 assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
 assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
 assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
 assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
-assert(args.length >= 3 && args.length <= 15, 'Invalid backend release argument count');
+assert(args.length >= 3 && args.length <= 17, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
-  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash]];
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash]];
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
 }
 assert.equal(billing, custom, 'Billing and custom-role hooks must be paired');
 if (closureMigration === 'true' || aclRepair === 'true')
-  assert([billing, commerce, intake].every(value => value === 'false') &&
+  assert([billing, commerce, intake, mail].every(value => value === 'false') &&
     !(closureMigration === 'true' && aclRepair === 'true'), 'Incompatible migration flags');
 const stagedRoot = fs.realpathSync(process.env.REVIEWED_INFRA_DIR ?? path.dirname(path.dirname(script)));
 assert(stagedRoot.startsWith(`${root}/releases/staging/`), 'Reviewed infra must be staged per run');
@@ -53,9 +54,18 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
+const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
+const mailEnvBeforeHash = process.env.CRM_MAIL_ENV_BEFORE_HASH ?? '';
+const mailEnvBundleHash = process.env.CRM_MAIL_ENV_BUNDLE_HASH ?? '';
+assert(['true', 'false'].includes(mailEnvInstall), 'Invalid Customers env installation flag');
+assert(mailEnvInstall === 'true' ? /^[a-f0-9]{64}$/.test(mailEnvBeforeHash) &&
+  /^[a-f0-9]{64}$/.test(mailEnvBundleHash) : !mailEnvBeforeHash && !mailEnvBundleHash,
+  'Invalid reviewed Customers env hashes');
+assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair].every(value => value === 'false'),
+  'Customers env installation cannot combine unrelated migration hooks');
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
 fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
@@ -178,11 +188,12 @@ function expectedEffectivePlan(state) {
     { env: { ...process.env, COMPOSE_PROFILES: '', IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) } }));
   const allowedRoles = [...Object.values(roles).flat(), 'postgres', 'rabbitmq', 'operations-restore-worker'];
   assert(Object.keys(plan.services).every(role => allowedRoles.includes(role)), 'Unexpected role in reviewed backend Compose');
+  const plannedRoles = rolesForPlan(plan.services);
   for (const app of apps) {
     const entry = state.manifest.services[app];
     if (!imageConfigs.has(entry.imageId)) imageConfigs.set(entry.imageId,
       JSON.parse(execute(`${app} effective image defaults`, 'docker', ['image', 'inspect', entry.imageId]))[0].Config);
-    for (const role of roles[app]) {
+    for (const role of plannedRoles[app]) {
       const service = plan.services[role];
       assert(service, `Missing reviewed Compose role: ${role}`);
       assert.equal(service.image, `aerocrm/${app}:${entry.sourceSha}`, `Unexpected planned image: ${role}`);
@@ -196,9 +207,10 @@ function expectedEffectivePlan(state) {
 }
 function verifyRuntime(state, alternate = null, allowStopped = false) {
   const current = runtime();
-  assertRuntime(state.manifest, current, alternate?.manifest, allowStopped);
   const expected = expectedEffectivePlan(state);
   const alternative = alternate ? expectedEffectivePlan(alternate) : null;
+  assertRuntime(state.manifest, current, alternate?.manifest, allowStopped, rolesForPlan(expected),
+    alternative ? rolesForPlan(alternative) : null);
   for (const container of current) {
     try { assertEffectiveConfig(expected[container.role], imageConfigs.get(container.imageId), container.inspection, container.role); }
     catch (error) {
@@ -211,7 +223,7 @@ function verifyRuntime(state, alternate = null, allowStopped = false) {
   return current;
 }
 function readiness(state, includeClosure = false) {
-  for (const port of ports) execute(`Readiness ${port}`, 'curl', ['--fail', '--silent', '--show-error', '--retry', '20',
+  for (const port of portsForPlan(expectedEffectivePlan(state))) execute(`Readiness ${port}`, 'curl', ['--fail', '--silent', '--show-error', '--retry', '20',
     '--retry-delay', '3', '--retry-connrefused', '--connect-timeout', '2', '--max-time', '5', '--retry-max-time', '90',
     `http://127.0.0.1:${port}/health/ready`]);
   if (state.closure.enabled || includeClosure) {
@@ -266,7 +278,7 @@ function compatibility(state) {
 function runMigrations() {
   const hooks = [['billing-capacity-migration.mjs', billing, billingHash],
     ['crm-custom-roles-migration.mjs', custom, customHash], ['crm-sales-commerce-migration.mjs', commerce, commerceHash],
-    ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash]];
+    ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash], ['crm-corporate-mail-migration.mjs', mail, mailHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
@@ -307,7 +319,10 @@ if (pending) {
 }
 if (!pending) {
   validateEnv(`${root}/env/backend`);
-  assert.equal(envHash(`${root}/env/backend`), expectedEnvHash, 'Active backend env hash mismatch');
+  const liveHash = envHash(`${root}/env/backend`);
+  assert(mailEnvInstall === 'true' ? liveHash === mailEnvBeforeHash ||
+    (canonical?.manifest.releaseSha === sha && liveHash === expectedEnvHash && canonical.envHash === expectedEnvHash) :
+    liveHash === expectedEnvHash, 'Active backend env hash mismatch');
 }
 const previous = pending?.previous ?? canonical ?? bootstrap();
 validateSnapshot(previous);
@@ -319,8 +334,27 @@ const target = validateState({ schemaVersion: 1, manifest, infraSha: process.env
     schemaAnchorSha: closureMigration === 'true' ? sha : previous.closure.schemaAnchorSha } });
 assert(closureMigration !== 'true' || !target.closure.enabled, 'Closure schema migration requires gate OFF');
 assert(aclRepair !== 'true' || target.closure.enabled, 'Identity ACL repair requires closure gate ON');
-snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
-expectedEffectivePlan(target);
+if (mailEnvInstall === 'true') {
+  // Build the candidate from the immutable previous snapshot, never from a
+  // potentially half-applied live directory during pending recovery.
+  let sourceState = previous;
+  if (!pending && mailEnvBeforeHash !== expectedEnvHash && canonical?.envHash === expectedEnvHash && canonical.manifest.releaseSha === sha) {
+    assert(fs.existsSync(previousFile), 'Committed Customers env retry requires its previous snapshot');
+    sourceState = validateState(JSON.parse(fs.readFileSync(previousFile, 'utf8')));
+  }
+  validateSnapshot(sourceState);
+  assert.equal(sourceState.envHash, mailEnvBeforeHash, 'Reviewed Customers before env hash mismatch');
+  const candidate = `${stagedRoot}/mail-env-candidate-${randomUUID()}`;
+  try {
+    stageMailEnvironment({ bundleFile: `${stagedRoot}/crm-customers-mail-env.json`,
+      bundleHash: mailEnvBundleHash, sourceDirectory: `${configDirectory(sourceState)}/env/backend`,
+      candidateDirectory: candidate });
+    validateEnv(candidate);
+    assert.equal(envHash(candidate), expectedEnvHash, 'Reviewed Customers after env hash mismatch');
+    snapshot(target, `${stagedRoot}/compose`, candidate);
+  } finally { fs.rmSync(candidate, { recursive: true, force: true }); }
+} else snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
+rolesForPlan(expectedEffectivePlan(target), true);
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 if (canonical && stateKey(canonical) === stateKey(target)) {
   const retained = verifyRuntime(target); readiness(target, closureMigration === 'true');

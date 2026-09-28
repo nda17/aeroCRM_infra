@@ -17,6 +17,7 @@ const resolvedCrmAccessBaselineAttempt = Object.freeze({
   applied_steps_count: 0
 });
 const inventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure-reviewed-inventory.json', import.meta.url)));
+const corporateMailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-reviewed-inventory.json', import.meta.url)));
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const literal = value => `'${value.replaceAll("'", "''")}'`;
 const ident = value => {
@@ -86,12 +87,22 @@ function isResolvedCrmAccessBaselineAttempt(owner, row) {
   return owner.service === 'crm-access' &&
     Object.entries(resolvedCrmAccessBaselineAttempt).every(([key, value]) => row[key] === value);
 }
-function verifyRows(owner, rows, complete) {
+function reviewedMigrations(owner, closureOnly = false) {
+  const migrations = Object.entries(inventory.owners[owner.service].migrations);
+  return closureOnly ? migrations.filter(([name]) => name <= migrationName) : migrations;
+}
+function assertReviewedAclHash(owner, actual, closureOnly = false) {
+  const expected = closureOnly && owner.service === 'crm-customers'
+    ? corporateMailInventory.legacyClosureCustomers.aclSha256
+    : inventory.owners[owner.service].aclSha256;
+  assert.equal(actual, expected, `Reviewed ACL inventory differs: ${owner.service}`);
+}
+function verifyRows(owner, rows, complete, closureOnly = false) {
   const resolved = rows.filter(row => isResolvedCrmAccessBaselineAttempt(owner, row));
   assert(resolved.length <= 1, 'Unexpected duplicate resolved CRM Access baseline attempt');
   const active = rows.filter(row => !isResolvedCrmAccessBaselineAttempt(owner, row));
-  const expected = Object.entries(inventory.owners[owner.service].migrations);
-  const allowed = complete ? expected : expected.slice(0, -1);
+  const expected = reviewedMigrations(owner, closureOnly);
+  const allowed = complete ? expected : expected.filter(([name]) => name < migrationName);
   assert.deepEqual(active.map(row => row.migration_name), allowed.map(([name]) => name),
     `Unexpected migration history: ${owner.service}`);
   for (const [index, row] of active.entries()) {
@@ -99,7 +110,12 @@ function verifyRows(owner, rows, complete) {
     assert(row.finished === true && row.rolled_back === false, `Incomplete migration: ${owner.service}/${row.migration_name}`);
   }
 }
-function imageInventory(owner, sha) {
+function assertClosureOnlyImage(migrations) {
+  assert(Object.hasOwn(migrations, migrationName), 'Historical workspace closure image lacks the reviewed closure migration');
+  assert(Object.keys(migrations).every(name => name <= migrationName),
+    'Historical workspace closure apply mode cannot apply post-closure migrations; use the reviewed corporate mail release hook');
+}
+function imageInventory(owner, sha, closureOnly = false) {
   const image = `aerocrm/${owner.service}:${sha}`;
   const revision = run(`${owner.service} image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -113,10 +129,11 @@ function imageInventory(owner, sha) {
        aclSha256:hash(fs.readFileSync(root+'/database-access.json')),
        acl:JSON.parse(fs.readFileSync(root+'/database-access.json','utf8'))}));`
   ]));
-  assert.deepEqual(observed.migrations, inventory.owners[owner.service].migrations,
+  if (closureOnly) assertClosureOnlyImage(observed.migrations);
+  const reviewedMigrationMap = Object.fromEntries(reviewedMigrations(owner, closureOnly));
+  assert.deepEqual(observed.migrations, reviewedMigrationMap,
     `Reviewed migration inventory differs: ${owner.service}`);
-  assert.equal(observed.aclSha256, inventory.owners[owner.service].aclSha256,
-    `Reviewed ACL inventory differs: ${owner.service}`);
+  assertReviewedAclHash(owner, observed.aclSha256, closureOnly);
   assert.equal(observed.acl.version, 1);
   assert.equal(observed.acl.service, owner.service);
   assert.deepEqual(observed.acl.tables.workspace_closure_fences, ['SELECT', 'INSERT', 'UPDATE']);
@@ -258,7 +275,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.deepEqual(Object.keys(inventory.owners).sort(), owners);
   for (const service of owners) {
     const migrations = Object.entries(inventory.owners[service].migrations);
-    assert.equal(migrations.at(-1)[0], migrationName);
+    const closureIndex = migrations.findIndex(([name]) => name === migrationName);
+    assert(closureIndex >= 0, `Reviewed closure migration missing: ${service}`);
     assert(migrations.every(([, hash]) => /^[a-f0-9]{64}$/.test(hash)));
     assert(/^[a-f0-9]{64}$/.test(inventory.owners[service].aclSha256));
     assert(inventory.owners[service].closureRoutines.length >= 2);
@@ -266,7 +284,23 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     const owner = { service };
     const rows = migrations.map(([migration_name, checksum]) => ({ migration_name, checksum, finished: true, rolled_back: false }));
     verifyRows(owner, rows, true);
-    verifyRows(owner, rows.slice(0, -1), false);
+    verifyRows(owner, rows.filter(row => row.migration_name < migrationName), false);
+    verifyRows(owner, rows.filter(row => row.migration_name <= migrationName), true, true);
+    const closureOnlyFixture = Object.fromEntries(migrations.filter(([name]) => name <= migrationName));
+    assertClosureOnlyImage(closureOnlyFixture);
+    if (migrations.some(([name]) => name > migrationName)) {
+      assert.throws(() => assertClosureOnlyImage(Object.fromEntries(migrations)),
+        /cannot apply post-closure migrations/);
+    }
+    if (service === 'crm-customers') {
+      const legacy = corporateMailInventory.legacyClosureCustomers;
+      assert.deepEqual(legacy.migrations, closureOnlyFixture);
+      assert(/^[a-f0-9]{64}$/.test(legacy.aclSha256));
+      assert.notEqual(legacy.aclSha256, inventory.owners[service].aclSha256);
+      assertReviewedAclHash(owner, legacy.aclSha256, true);
+      assert.throws(() => assertReviewedAclHash(owner, inventory.owners[service].aclSha256, true),
+        /Reviewed ACL inventory differs/);
+    }
     assert.throws(() => verifyRows(owner, [{ ...rows[0], checksum: '0'.repeat(64) }], false));
     assert.throws(() => verifyRows(owner, [{ ...rows[0], finished: false, rolled_back: true }, ...rows.slice(1)], true));
     if (service === 'crm-access') {
@@ -350,11 +384,14 @@ assert.deepEqual(Object.keys(inventory.owners).sort(), owners);
 const identities = owners.map(privateIdentity);
 const envLines = identities.map(owner => `${sha256(owner.bytes)}  ./${owner.service}.env\n`).join('');
 assert.equal(sha256(envLines), expectedEnvHash, 'Private closure migration env aggregate hash mismatch');
-for (const owner of identities) {
-  const acl = imageInventory(owner, sha);
+// Inspect every immutable image before any service can run Prisma DDL. New additive
+// migrations require their own reviewed hook and cannot inherit historical approval.
+const reviewedAcls = identities.map(owner => imageInventory(owner, sha, true));
+for (const [index, owner] of identities.entries()) {
+  const acl = reviewedAcls[index];
   const before = migrationRows(owner);
   const complete = before.some(row => row.migration_name === migrationName);
-  verifyRows(owner, before, complete);
+  verifyRows(owner, before, complete, true);
   if (!complete) {
     run(`${owner.service} Prisma migration`, 'docker', [
       'run', '--rm', '--network', 'host', '--env', 'NODE_ENV', '--env', `${owner.schema.toUpperCase()}_DATABASE_URL`,
@@ -362,7 +399,7 @@ for (const owner of identities) {
       'node_modules/prisma/build/index.js', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'
     ], { env: { ...process.env, ...owner.values } });
   }
-  verifyRows(owner, migrationRows(owner), true);
+  verifyRows(owner, migrationRows(owner), true, true);
   applyClosureAcl(owner, acl);
   console.log(`Closure migration and ACL verified: ${owner.service}`);
 }

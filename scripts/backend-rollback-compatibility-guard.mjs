@@ -25,6 +25,8 @@ const commerceMigration = '20260923010000_sales_commerce';
 const closureMigration = '20260923030000_workspace_closure';
 const closureOwners = ['crm-access', 'identity', 'billing', 'crm-customers', 'crm-sales', 'crm-intake', 'notification-delivery'];
 const closureInventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure-reviewed-inventory.json', import.meta.url)));
+const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-reviewed-inventory.json', import.meta.url)));
+const mailMigration = '20260928000000_corporate_mail';
 const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
 const commerceBusinessDataTables = [
   'commerce_catalog_items', 'commerce_deal_lines', 'commerce_commands',
@@ -55,6 +57,7 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
 }
 function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
+  const accepted = service === 'crm-customers' ? [expected, mailInventory.legacyClosureCustomers] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -63,14 +66,15 @@ function closureImageReviewed(service, sha, execute = run) {
     'run', '--rm', '--network', 'none', '--entrypoint', 'node', image, '-e',
     `const fs=require('node:fs'),crypto=require('node:crypto'),root='/app/prisma';
      const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
-     const expected=${JSON.stringify(expected.migrations)};
+     const inventories=${JSON.stringify(accepted.map(entry => entry.migrations))};
      const names=fs.readdirSync(root+'/migrations',{withFileTypes:true})
        .filter(entry=>entry.isDirectory()).map(entry=>entry.name).sort();
-     const verified=names.length===Object.keys(expected).length && names.every(name=>
-       expected[name]===hash(fs.readFileSync(root+'/migrations/'+name+'/migration.sql')));
-     console.log(JSON.stringify({migrations:verified,aclSha:hash(fs.readFileSync(root+'/database-access.json'))}));`
+     const inventoryIndex=inventories.findIndex(expected=>names.length===Object.keys(expected).length && names.every(name=>
+       expected[name]===hash(fs.readFileSync(root+'/migrations/'+name+'/migration.sql'))));
+     console.log(JSON.stringify({migrations:inventoryIndex>=0,inventoryIndex,aclSha:hash(fs.readFileSync(root+'/database-access.json'))}));`
   ]));
-  return result.migrations === true && result.aclSha === expected.aclSha256;
+  const inventoryIndex = result.inventoryIndex ?? (accepted.length === 1 ? 0 : -1);
+  return result.migrations === true && Number.isInteger(inventoryIndex) && result.aclSha === accepted[inventoryIndex]?.aclSha256;
 }
 function commerceBusinessDataQuery() {
   return `SELECT json_build_object('businessWrites', ${commerceBusinessDataTables
@@ -79,6 +83,14 @@ function commerceBusinessDataQuery() {
 function assertNoCommerceBusinessWrites(state) {
   assert.equal(state.businessWrites, false,
     'Candidate CRM Sales image cannot read persisted commerce data');
+}
+function mailBusinessDataQuery() {
+  return `SELECT json_build_object('mailData', ${Object.keys(mailInventory.mailTables)
+    .map(table => `EXISTS (SELECT 1 FROM crm_customers.${table})`).join(' OR ')})::text;`;
+}
+function assertNoMailData(state) {
+  assert.equal(state.mailData, false,
+    'Old Customers image cannot protect persisted mail data/jobs/admitted sends; disable admission via CI/CD and retain compatible outcome workers');
 }
 function readDatabaseUrl(file, key, identity) {
   const stat = fs.lstatSync(file);
@@ -131,6 +143,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     if (calls === 1) return 'a'.repeat(40);
     assert(args.includes('none'));
     assert(args.at(-1).includes(closureInventory.owners.identity.aclSha256) === false);
+    assert(args.at(-1).includes(closureInventory.owners.identity.migrations[closureMigration]));
     return JSON.stringify({ migrations: true, aclSha: closureInventory.owners.identity.aclSha256 });
   }));
   assert.equal(calls, 2);
@@ -140,6 +153,34 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assertNoCommerceBusinessWrites({ businessWrites: false });
   assert.throws(() => assertNoCommerceBusinessWrites({ businessWrites: true }),
     /cannot read persisted commerce data/);
+  const mailQuery = mailBusinessDataQuery();
+  for (const table of Object.keys(mailInventory.mailTables)) assert(mailQuery.includes(`crm_customers.${table}`));
+  assert.equal(Object.keys(mailInventory.mailTables).length, 12);
+  assertNoMailData({ mailData: false });
+  assert.throws(() => assertNoMailData({ mailData: true }), /cannot protect persisted mail data/);
+  const customers = closureInventory.owners['crm-customers'];
+  const legacy = mailInventory.legacyClosureCustomers;
+  const reviewedPairs = [customers, legacy];
+  const reviewCustomers = (pair, crossAcl = false) => {
+    let calls = 0;
+    const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {
+      calls++;
+      assert.equal(executable, 'docker');
+      if (calls === 1) return 'b'.repeat(40);
+      const script = args.at(-1);
+      for (const reviewed of reviewedPairs)
+        for (const checksum of Object.values(reviewed.migrations)) assert(script.includes(checksum));
+      const inventoryIndex = reviewedPairs.indexOf(pair);
+      return JSON.stringify({ migrations: true, inventoryIndex,
+        aclSha: crossAcl ? reviewedPairs[1 - inventoryIndex].aclSha256 : pair.aclSha256 });
+    });
+    assert.equal(calls, 2);
+    return result;
+  };
+  assert.equal(reviewCustomers(customers), true);
+  assert.equal(reviewCustomers(legacy), true);
+  assert.equal(reviewCustomers(customers, true), false);
+  assert.equal(reviewCustomers(legacy, true), false);
   console.log('Backend commerce rollback policy fixtures verified');
   process.exit(0);
 }
@@ -204,19 +245,32 @@ const billingCapabilities = imageCapabilities(candidateImage('billing'), [
 const salesCapabilities = imageCapabilities(candidateImage('crm-sales'), [commerceMigration], {
   [commerceMigration]: commerceChecksum
 });
+const mailCapabilities = imageCapabilities(candidateImage('crm-customers'), [mailMigration], {
+  [mailMigration]: mailInventory.migrations[mailMigration]
+});
 assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
-  salesCapabilities.length === 1 &&
+  salesCapabilities.length === 1 && mailCapabilities.length === 1 &&
   [...crmCapabilities, ...billingCapabilities, ...salesCapabilities].every(value => typeof value === 'boolean'),
   'Candidate image compatibility inventory is invalid');
+assert(typeof mailCapabilities[0] === 'boolean', 'Invalid mail image compatibility inventory');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
-if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0]) {
+if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0]) {
   console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
   console.error('Candidate backend images require a stopped-writer data compatibility check');
   process.exit(2);
+}
+
+if (!mailCapabilities[0]) {
+  const customers = readDatabaseUrl('/opt/aerocrm/env/migrations/crm-customers.env', 'CRM_CUSTOMERS_DATABASE_URL', {
+    database: 'aerocrm_crm_customers', role: 'aerocrm_crm_customers_migration', schema: 'crm_customers'
+  });
+  const applied = inspectDatabase(customers, `SELECT EXISTS (SELECT 1 FROM crm_customers._prisma_migrations
+    WHERE migration_name='${mailMigration}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL)::text;`);
+  if (applied) assertNoMailData(inspectDatabase(customers, mailBusinessDataQuery()));
 }
 
 const crmAccess = readDatabaseUrl(crmAccessEnvFile, 'CRM_ACCESS_DATABASE_URL', {

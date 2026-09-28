@@ -45,7 +45,9 @@ workspace_closure_migration=${12:-false}
 workspace_closure_migration_env_hash=${13:-}
 workspace_closure_identity_acl_repair=${14:-false}
 workspace_closure_identity_env_hash=${15:-}
-[[ $# -le 15 ]] || exit 64
+crm_corporate_mail_migration=${16:-false}
+crm_corporate_mail_migration_env_hash=${17:-}
+[[ $# -le 17 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -76,6 +78,12 @@ if [[ "$crm_intake_notifications_migration" == true ]]; then
 else
   [[ -z "$crm_intake_notifications_migration_env_hash" ]] || exit 64
 fi
+if [[ "$crm_corporate_mail_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_corporate_mail_migration_env_hash" =~ ^[a-f0-9]{64}$ &&
+    "$workspace_closure_migration" == false && "$workspace_closure_identity_acl_repair" == false ]] || exit 64
+else
+  [[ "$crm_corporate_mail_migration" == false && -z "$crm_corporate_mail_migration_env_hash" ]] || exit 64
+fi
 if [[ "$workspace_closure_migration" == true ]]; then
   [[ "$role" == backend && "$billing_capacity_migration" == false &&
     "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
@@ -96,6 +104,10 @@ if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
   node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
   [[ -x "$node_bin" ]] || { echo 'Pinned backend release Node is unavailable' >&2; exit 1; }
   exec "$node_bin" "$(dirname "$0")/backend-release.mjs" "$@"
+fi
+if [[ "$crm_corporate_mail_migration" == true ]]; then
+  echo 'Corporate mail migration requires the full canonical backend manifest controller' >&2
+  exit 1
 fi
 if [[ "$role" == backend && -f /opt/aerocrm/releases/backend-state.json ]]; then
   echo 'Canonical backend state adopted; backend manifest is required' >&2
@@ -269,7 +281,7 @@ if [[ "$role" == frontend ]]; then
   done
   sudo -n /usr/local/sbin/aerocrm-nginx-release apply "$sha"
 else
-  ports=(4100 4401 4500 4600 4800 4801 4802 4803 4900 4901 4902 5000 5001 5100 5101 5102 5200 5201 5202 5300 5301 5302 5310 5311 5312 5317 5318 5320 5330 5331)
+  ports=(4100 4401 4500 4600 4800 4801 4802 4803 4900 4901 4902 5000 5001 5100 5101 5102 5200 5201 5202 5300 5301 5302 5310 5311 5312 5317 5318 5320 5321 5322 5330 5331)
   for port in "${ports[@]}"; do
     curl --fail --silent --show-error --retry 20 --retry-delay 3 --retry-connrefused --connect-timeout 2 --max-time 5 --retry-max-time 90 "http://127.0.0.1:$port/health/ready" >/dev/null
   done

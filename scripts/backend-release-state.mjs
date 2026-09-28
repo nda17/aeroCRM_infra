@@ -14,11 +14,24 @@ export const roles = {
   operations: ['operations-api', 'operations-worker', 'operations-outbox-publisher'],
   'crm-access': ['crm-access-api', 'crm-access-worker', 'crm-access-outbox-publisher'],
   'crm-intake': ['crm-intake-api', 'crm-intake-worker', 'crm-intake-publisher', 'crm-intake-sla-worker', 'crm-intake-sla-publisher'],
-  'crm-customers': ['crm-customers-api'], 'crm-sales': ['crm-sales-api', 'crm-sales-reminders']
+  'crm-customers': ['crm-customers-api', 'crm-customers-mail-sync', 'crm-customers-mail-send'], 'crm-sales': ['crm-sales-api', 'crm-sales-reminders']
 };
 export const ports = [4100, 4401, 4500, 4600, 4800, 4801, 4802, 4803, 4900, 4901, 4902,
   5000, 5001, 5100, 5101, 5102, 5200, 5201, 5202, 5300, 5301, 5302, 5310, 5311, 5312,
-  5317, 5318, 5320, 5330, 5331];
+  5317, 5318, 5320, 5321, 5322, 5330, 5331];
+// Historical immutable Compose snapshots have 30 roles. A reviewed target must
+// have both mail roles; never accept only one worker or infer from live containers.
+export function rolesForPlan(services, requireMail = false) {
+  const hasSync = Object.hasOwn(services, 'crm-customers-mail-sync');
+  const hasSend = Object.hasOwn(services, 'crm-customers-mail-send');
+  assert.equal(hasSync, hasSend, 'Mail process roles must be paired');
+  assert(!requireMail || hasSync, 'Reviewed target requires both mail process roles');
+  return { ...roles, 'crm-customers': hasSync ? roles['crm-customers'] : ['crm-customers-api'] };
+}
+export function portsForPlan(services) {
+  const selected = rolesForPlan(services);
+  return selected['crm-customers'].length === 3 ? ports : ports.filter(port => ![5321, 5322].includes(port));
+}
 const sha = /^[a-f0-9]{40}$/;
 const hash = /^[a-f0-9]{64}$/;
 const runId = /^[0-9]+$/;
@@ -80,13 +93,29 @@ export function stateKey(state) {
   validateState(state);
   return createHash('sha256').update(JSON.stringify(state)).digest('hex');
 }
-export function assertRuntime(manifest, containers, alternate = null, allowStopped = false) {
+export function assertRuntime(manifest, containers, alternate = null, allowStopped = false, expectedRoles = roles, alternateRoles = null) {
   validateManifest(manifest); if (alternate) validateManifest(alternate);
-  const expected = Object.values(roles).flat().sort();
-  assert.deepEqual(containers.map(c => c.role).sort(), expected, 'Backend runtime roles differ from reviewed inventory');
-  for (const app of apps) for (const role of roles[app]) {
+  const expected = Object.values(expectedRoles).flat().sort();
+  const present = containers.map(c => c.role).sort();
+  let inspectedRoles = expectedRoles;
+  if (alternateRoles && allowStopped) {
+    assert(alternate, 'Pending role recovery requires both reviewed manifests');
+    const alternative = Object.values(alternateRoles).flat();
+    const allowed = new Set([...expected, ...alternative]);
+    const required = expected.filter(role => alternative.includes(role));
+    // Compose may be interrupted between worker additions/removals. Only the
+    // durable pending path permits that subset; stable verification remains exact.
+    assert(new Set(present).size === present.length && present.every(role => allowed.has(role)) &&
+      required.every(role => present.includes(role)), 'Pending runtime roles differ from both reviewed inventories');
+    inspectedRoles = Object.fromEntries(apps.map(app => [app,
+      [...new Set([...expectedRoles[app], ...alternateRoles[app]])].filter(role => present.includes(role))]));
+  } else assert.deepEqual(present, expected, 'Backend runtime roles differ from reviewed inventory');
+  for (const app of apps) for (const role of inspectedRoles[app]) {
     const container = containers.find(c => c.role === role);
-    const candidates = [manifest.services[app], ...(alternate ? [alternate.services[app]] : [])];
+    const candidates = [
+      ...(expectedRoles[app].includes(role) ? [manifest.services[app]] : []),
+      ...(alternate && (!alternateRoles || alternateRoles[app].includes(role)) ? [alternate.services[app]] : [])
+    ];
     assert(candidates.some(entry => container.imageId === entry.imageId && container.revision === entry.sourceSha &&
       container.image === `aerocrm/${app}:${entry.sourceSha}`), `Unexpected immutable runtime image: ${role}`);
     assert(allowStopped || container.running, `Backend runtime is not running: ${role}`);

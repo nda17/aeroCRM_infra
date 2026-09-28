@@ -322,6 +322,26 @@ services:
       NODE_ENV: production
     security_opt:
       - no-new-privileges:true
+  crm-customers-mail-sync:
+    image: aerocrm/crm-customers:${CRM_CUSTOMERS_IMAGE_SHA:-${IMAGE_SHA:?exact release SHA required}}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-customers-mail-sync.env
+    environment:
+      APP_REVISION: ${CRM_CUSTOMERS_IMAGE_SHA:-${IMAGE_SHA}}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+  crm-customers-mail-send:
+    image: aerocrm/crm-customers:${CRM_CUSTOMERS_IMAGE_SHA:-${IMAGE_SHA:?exact release SHA required}}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-customers-mail-send.env
+    environment:
+      APP_REVISION: ${CRM_CUSTOMERS_IMAGE_SHA:-${IMAGE_SHA}}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
   crm-sales-api:
     image: aerocrm/crm-sales:${CRM_SALES_IMAGE_SHA:-${IMAGE_SHA:?exact release SHA required}}
     restart: unless-stopped
