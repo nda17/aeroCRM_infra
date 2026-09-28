@@ -58,7 +58,7 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
 function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
   const accepted = service === 'crm-customers'
-    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers] : [expected];
+    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -156,13 +156,14 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     /cannot read persisted commerce data/);
   const mailQuery = mailBusinessDataQuery();
   for (const table of Object.keys(mailInventory.mailTables)) assert(mailQuery.includes(`crm_customers.${table}`));
-  assert.equal(Object.keys(mailInventory.mailTables).length, 12);
+  assert.equal(Object.keys(mailInventory.mailTables).length, 14);
   assertNoMailData({ mailData: false });
   assert.throws(() => assertNoMailData({ mailData: true }), /cannot protect persisted mail data/);
   const customers = closureInventory.owners['crm-customers'];
   const legacy = mailInventory.legacyClosureCustomers;
   const previous = mailInventory.previousMailCustomers;
-  const reviewedPairs = [customers, legacy, previous];
+  const previousNotifications = mailInventory.previousNotificationsCustomers;
+  const reviewedPairs = [customers, legacy, previous, previousNotifications];
   const reviewCustomers = (pair, crossAcl = false) => {
     let calls = 0;
     const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {
@@ -183,9 +184,11 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(customers), true);
   assert.equal(reviewCustomers(legacy), true);
   assert.equal(reviewCustomers(previous), true);
+  assert.equal(reviewCustomers(previousNotifications), true);
   assert.equal(reviewCustomers(customers, true), false);
   assert.equal(reviewCustomers(legacy, true), false);
   assert.equal(reviewCustomers(previous, true), false);
+  assert.equal(reviewCustomers(previousNotifications, true), false);
   console.log('Backend rollback policy fixtures verified');
   process.exit(0);
 }

@@ -14,7 +14,7 @@ const schema = 'crm_customers';
 const runtime = 'aerocrm_crm_customers_runtime';
 const backup = 'aerocrm_crm_customers_backup';
 const owner = 'aerocrm_crm_customers_migration';
-const migration = '20260928010000_mail_reply_guard_alias';
+const migration = '20260928020000_mail_notifications';
 const hash = value => createHash('sha256').update(value).digest('hex');
 const literal = value => `'${value.replaceAll("'", "''")}'`;
 const ident = value => { assert(/^[a-z_][a-z0-9_]*$/.test(value)); return `"${value}"`; };
@@ -33,8 +33,9 @@ function psql(password, query, json = true) {
 export function verifyRows(rows, allowPrevious) {
   const expected = Object.entries(inventory.migrations);
   assert.deepEqual(expected.map(([name]) => name), ['20260920000000_init_aerocrm',
-    '20260923030000_workspace_closure', '20260928000000_corporate_mail', migration]);
-  assert((allowPrevious ? [2, 3, 4] : [4]).includes(rows.length),
+    '20260923030000_workspace_closure', '20260928000000_corporate_mail',
+    '20260928010000_mail_reply_guard_alias', migration]);
+  assert((allowPrevious ? [2, 3, 4, 5] : [5]).includes(rows.length),
     'Unexpected corporate mail migration history');
   assert.deepEqual(rows.map(row => row.name), expected.slice(0, rows.length).map(([name]) => name));
   rows.forEach((row, index) => {
