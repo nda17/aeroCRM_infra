@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { apps, roles, validateManifest, validateState, validatePending, compositionDiff, uniformManifest,
-  imageVariables, stateKey, assertRuntime } from './backend-release-state.mjs';
+  imageVariables, stateKey, assertRuntime, assertEffectiveConfig } from './backend-release-state.mjs';
 
 const sha = char => char.repeat(40);
 const hash = char => char.repeat(64);
@@ -32,6 +32,26 @@ function state(release, run) {
   return { schemaVersion: 1, manifest: manifest({ release, run }), infraSha: sha('e'),
     envHash: hash('f'), composeHash: hash('1'),
     closure: { enabled: true, schemaAnchorSha: sha('2') } };
+}
+
+function effectiveConfigFixture() {
+  const role = 'synthetic-service';
+  const service = { image: 'aerocrm/synthetic:abc123', network_mode: 'host', restart: 'unless-stopped',
+    security_opt: ['no-new-privileges:true'], environment: { OVERRIDE: 'compose-value', APP_REVISION: 'abc123' },
+    volumes: [{ type: 'bind', source: '/private/test-key.pem', target: '/run/secrets/key.pem', read_only: true }] };
+  const imageConfig = { Env: ['PATH=/bin', 'IMAGE_DEFAULT=from-image', 'OVERRIDE=image-value',
+    'PRIVATE_TOKEN=synthetic-private-token'], Cmd: ['node', 'index.js'], Entrypoint: ['/entrypoint'],
+  User: '10001:10001', WorkingDir: '/srv/app' };
+  const container = { Config: { Env: ['PATH=/bin', 'IMAGE_DEFAULT=from-image', 'OVERRIDE=compose-value',
+    'PRIVATE_TOKEN=synthetic-private-token', 'APP_REVISION=abc123'], Cmd: ['node', 'index.js'],
+  Entrypoint: ['/entrypoint'], User: '10001:10001', WorkingDir: '/srv/app' },
+  HostConfig: { NetworkMode: 'host', RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 },
+    SecurityOpt: ['no-new-privileges:true'], Privileged: false, ReadonlyRootfs: false, CapAdd: [], CapDrop: [],
+    Devices: [], Dns: [], PortBindings: {}, Memory: 0, MemoryReservation: 0, NanoCpus: 0, CpuQuota: 0,
+    CpuPeriod: 0, CpuShares: 0 },
+  Mounts: [{ Type: 'bind', Source: '/private/test-key.pem', Destination: '/run/secrets/key.pem', RW: false,
+    Propagation: 'rprivate' }] };
+  return { role, service, imageConfig, container };
 }
 
 test('manifest accepts the exact 13-service immutable image contract', () => {
@@ -151,4 +171,82 @@ test('migration gate can distinguish a uniform full release from a mixed baselin
   } }));
   assert.equal(variables.BILLING_IMAGE_SHA, sha('a'));
   assert.equal(variables.CRM_SALES_IMAGE_SHA, sha('f'));
+});
+
+test('effective config accepts image defaults merged with Compose overrides and explicit reviewed overrides', () => {
+  const { role, service, imageConfig, container } = effectiveConfigFixture();
+  assert.equal(assertEffectiveConfig(service, imageConfig, container, role), true);
+  const explicit = structuredClone(service);
+  explicit.command = ['node', 'server.js']; explicit.entrypoint = ['/custom-entrypoint'];
+  explicit.user = '2000:2000'; explicit.working_dir = '/app';
+  const configured = structuredClone(container);
+  configured.Config.Cmd = explicit.command; configured.Config.Entrypoint = explicit.entrypoint;
+  configured.Config.User = explicit.user; configured.Config.WorkingDir = explicit.working_dir;
+  assert.equal(assertEffectiveConfig(explicit, imageConfig, configured, role), true);
+});
+
+test('effective config rejects secret environment drift without printing the secret value', () => {
+  const fixture = effectiveConfigFixture();
+  fixture.container.Config.Env = fixture.container.Config.Env.map(value =>
+    value.startsWith('PRIVATE_TOKEN=') ? 'PRIVATE_TOKEN=unreviewed-secret-value' : value);
+  assert.throws(() => assertEffectiveConfig(fixture.service, fixture.imageConfig, fixture.container, fixture.role),
+    error => error.message === `Runtime environment drift: ${fixture.role}` &&
+      !error.message.includes('unreviewed-secret-value') && !error.message.includes('synthetic-private-token'));
+});
+
+test('effective config rejects command, entrypoint, user, and working-directory drift', () => {
+  for (const [field, mutate, message] of [
+    ['command', f => { f.container.Config.Cmd = ['sh']; }, /command drift/],
+    ['entrypoint', f => { f.container.Config.Entrypoint = ['/unexpected']; }, /entrypoint drift/],
+    ['user', f => { f.container.Config.User = '0:0'; }, /user drift/],
+    ['working directory', f => { f.container.Config.WorkingDir = '/tmp'; }, /working directory drift/]
+  ]) {
+    const fixture = effectiveConfigFixture(); mutate(fixture);
+    assert.throws(() => assertEffectiveConfig(fixture.service, fixture.imageConfig, fixture.container, fixture.role),
+      message, field);
+  }
+});
+
+test('effective config rejects network, restart, security, privilege, capability, device, DNS, and port drift', () => {
+  const cases = [
+    ['Compose network mode', f => { f.service.network_mode = 'bridge'; }, /network\/restart/],
+    ['Compose restart policy', f => { f.service.restart = 'always'; }, /network\/restart/],
+    ['container network mode', f => { f.container.HostConfig.NetworkMode = 'bridge'; }, /network drift/],
+    ['container restart policy', f => { f.container.HostConfig.RestartPolicy.Name = 'always'; }, /restart policy drift/],
+    ['container retry count', f => { f.container.HostConfig.RestartPolicy.MaximumRetryCount = 5; }, /retry policy drift/],
+    ['security options', f => { f.container.HostConfig.SecurityOpt = []; }, /security option drift/],
+    ['privileged mode', f => { f.container.HostConfig.Privileged = true; }, /privilege\/network override/],
+    ['read-only root', f => { f.container.HostConfig.ReadonlyRootfs = true; }, /privilege\/network override/],
+    ['added capability', f => { f.container.HostConfig.CapAdd = ['SYS_ADMIN']; }, /privilege\/network override/],
+    ['dropped capability policy', f => { f.container.HostConfig.CapDrop = ['NET_RAW']; }, /privilege\/network override/],
+    ['device mapping', f => { f.container.HostConfig.Devices = [{ PathOnHost: '/dev/null' }]; }, /privilege\/network override/],
+    ['DNS override', f => { f.container.HostConfig.Dns = ['1.1.1.1']; }, /privilege\/network override/],
+    ['published port', f => { f.container.HostConfig.PortBindings = { '80/tcp': [] }; }, /privilege\/network override/],
+    ['memory limit', f => { f.container.HostConfig.Memory = 1024; }, /resource policy drift/],
+    ['CPU quota', f => { f.container.HostConfig.CpuQuota = 1000; }, /resource policy drift/]
+  ];
+  for (const [name, mutate, message] of cases) {
+    const fixture = effectiveConfigFixture(); mutate(fixture);
+    assert.throws(() => assertEffectiveConfig(fixture.service, fixture.imageConfig, fixture.container, fixture.role),
+      message, name);
+  }
+});
+
+test('effective config requires an exact read-only bind mount and rejects unreviewed Compose fields', () => {
+  const fixture = effectiveConfigFixture();
+  assert.equal(assertEffectiveConfig(fixture.service, fixture.imageConfig, fixture.container, fixture.role), true);
+  const cases = [
+    ['missing mount', f => { f.container.Mounts = []; }, /mount drift/],
+    ['wrong host source', f => { f.container.Mounts[0].Source = '/tmp/other.pem'; }, /mount drift/],
+    ['wrong container destination', f => { f.container.Mounts[0].Destination = '/run/other.pem'; }, /mount drift/],
+    ['writable bind', f => { f.container.Mounts[0].RW = true; }, /mount drift/],
+    ['unreviewed propagation', f => { f.container.Mounts[0].Propagation = 'shared'; }, /bind propagation drift/],
+    ['unreviewed volume type', f => { f.service.volumes[0].type = 'volume'; }, /volume policy/],
+    ['unknown Compose option', f => { f.service.cap_add = ['SYS_ADMIN']; }, /Unreviewed Compose option/]
+  ];
+  for (const [name, mutate, message] of cases) {
+    const item = effectiveConfigFixture(); mutate(item);
+    assert.throws(() => assertEffectiveConfig(item.service, item.imageConfig, item.container, item.role),
+      message, name);
+  }
 });

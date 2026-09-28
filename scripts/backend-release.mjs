@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { apps, roles, ports, validateManifest, validateState, uniformManifest, compositionDiff,
-  imageVariables, stateKey, assertRuntime, validatePending } from './backend-release-state.mjs';
+  imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 
@@ -158,43 +158,54 @@ function runtime() {
     .filter(c => !['postgres', 'rabbitmq'].includes(c.Config.Labels?.['com.docker.compose.service']))
     .map(c => ({ role: c.Config.Labels?.['com.docker.compose.service'], id: c.Id, imageId: c.Image,
       image: c.Config.Image, revision: c.Config.Env.find(value => value.startsWith('APP_REVISION='))?.slice(13), running: c.State.Running,
-      configHash: c.Config.Labels?.['com.docker.compose.config-hash'],
+      inspection: c,
       closureGate: c.Config.Env.find(value => value.startsWith('CRM_ACCESS_CLOSURE_ENABLED='))?.split('=')[1] }));
 }
-const configHashes = new Map();
-function expectedConfigHashes(state) {
+const effectivePlans = new Map();
+const imageConfigs = new Map();
+function expectedEffectivePlan(state) {
   const key = stateKey(state);
-  if (configHashes.has(key)) return configHashes.get(key);
+  if (effectivePlans.has(key)) return effectivePlans.get(key);
   const directory = configDirectory(state);
   const expectedFile = `${directory}/compose/effective-check.yml`;
-  // Env files are resolved from the private snapshot. Bind sources remain their stable live paths.
+  // Resolve private snapshot env files while preserving stable live bind sources.
   const template = fs.readFileSync(`${directory}/compose/backend.yml`, 'utf8')
     .replaceAll('./rabbitmq.conf:', `${root}/compose/rabbitmq.conf:`)
     .replaceAll('../secrets/', `${root}/secrets/`);
   atomic(expectedFile, template);
-  const output = execute('Expected backend effective config hashes', 'docker', ['compose', '--project-name', 'aerocrm-backend',
-    '-f', expectedFile, 'config', '--hash', '*'],
-    { env: { ...process.env, COMPOSE_PROFILES: '', IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) } });
-  const hashes = Object.fromEntries(output.split('\n').filter(Boolean).map(line => {
-    const pair = line.trim().split(/\s+/);
-    assert(pair.length === 2 && /^[a-f0-9]{64}$/.test(pair[1]), 'Unexpected Compose config hash report');
-    return pair;
-  }));
+  const plan = JSON.parse(execute('Expected backend effective configuration', 'docker', ['compose', '--project-name', 'aerocrm-backend',
+    '-f', expectedFile, 'config', '--format', 'json'],
+    { env: { ...process.env, COMPOSE_PROFILES: '', IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) } }));
   const allowedRoles = [...Object.values(roles).flat(), 'postgres', 'rabbitmq', 'operations-restore-worker'];
-  assert(Object.keys(hashes).every(role => allowedRoles.includes(role)), 'Unexpected role in reviewed backend Compose');
-  for (const role of Object.values(roles).flat()) assert(hashes[role], `Missing reviewed Compose role: ${role}`);
-  configHashes.set(key, hashes);
-  return hashes;
+  assert(Object.keys(plan.services).every(role => allowedRoles.includes(role)), 'Unexpected role in reviewed backend Compose');
+  for (const app of apps) {
+    const entry = state.manifest.services[app];
+    if (!imageConfigs.has(entry.imageId)) imageConfigs.set(entry.imageId,
+      JSON.parse(execute(`${app} effective image defaults`, 'docker', ['image', 'inspect', entry.imageId]))[0].Config);
+    for (const role of roles[app]) {
+      const service = plan.services[role];
+      assert(service, `Missing reviewed Compose role: ${role}`);
+      assert.equal(service.image, `aerocrm/${app}:${entry.sourceSha}`, `Unexpected planned image: ${role}`);
+      assert.equal(service.environment?.APP_REVISION, entry.sourceSha, `Unexpected planned revision: ${role}`);
+    }
+  }
+  if (plan.services['operations-restore-worker'])
+    assert.deepEqual(plan.services['operations-restore-worker'].profiles, ['restore'], 'Restore must remain profile-only');
+  effectivePlans.set(key, plan.services);
+  return plan.services;
 }
 function verifyRuntime(state, alternate = null, allowStopped = false) {
   const current = runtime();
   assertRuntime(state.manifest, current, alternate?.manifest, allowStopped);
-  const expected = expectedConfigHashes(state);
-  const alternative = alternate ? expectedConfigHashes(alternate) : null;
-  for (const container of current)
-    assert(container.configHash === expected[container.role] ||
-      (alternative && container.configHash === alternative[container.role]),
-      `Runtime effective configuration drift: ${container.role}`);
+  const expected = expectedEffectivePlan(state);
+  const alternative = alternate ? expectedEffectivePlan(alternate) : null;
+  for (const container of current) {
+    try { assertEffectiveConfig(expected[container.role], imageConfigs.get(container.imageId), container.inspection, container.role); }
+    catch (error) {
+      if (!alternative) throw error;
+      assertEffectiveConfig(alternative[container.role], imageConfigs.get(container.imageId), container.inspection, container.role);
+    }
+  }
   for (const container of current.filter(c => roles['crm-access'].includes(c.role)))
     assert.equal(container.closureGate, String(state.closure.enabled), `Closure runtime gate mismatch: ${container.role}`);
   return current;
@@ -309,7 +320,7 @@ const target = validateState({ schemaVersion: 1, manifest, infraSha: process.env
 assert(closureMigration !== 'true' || !target.closure.enabled, 'Closure schema migration requires gate OFF');
 assert(aclRepair !== 'true' || target.closure.enabled, 'Identity ACL repair requires closure gate ON');
 snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
-expectedConfigHashes(target);
+expectedEffectivePlan(target);
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 if (canonical && stateKey(canonical) === stateKey(target)) {
   const retained = verifyRuntime(target); readiness(target, closureMigration === 'true');

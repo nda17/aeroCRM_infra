@@ -21,9 +21,10 @@ compressed artifact SHA-256 and originating green CI run. The manifest's release
 identifies the product snapshot; retained apps may keep older source SHAs. Compose uses
 per-app image variables and `APP_REVISION`, so ordinary releases preserve containers
 whose image and effective configuration have not changed. Every runtime role, including
-retained roles, is checked against its expected image ID, revision and Compose effective
-configuration hash. Snapshot env resolution and stable bind sources are checked against
-the live container config-hash labels without printing private values. The restore profile
+retained roles, is checked against its expected image ID, revision and effective
+configuration. Resolved snapshot env plus image defaults, process command/user, network,
+restart/security policy and stable bind mounts are compared with Docker inspect without
+printing private values. The restore profile
 is excluded, and an unexpected restore process blocks adoption.
 
 The workflow uploads reviewed infra and manifest into a unique

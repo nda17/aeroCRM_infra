@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertEffectiveConfig } from './backend-release-state.mjs';
 
 const infraRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const composeSource = path.join(infraRoot, 'compose/backend.yml');
@@ -66,10 +67,10 @@ test('Docker Compose changes selected app process roles, retains other container
     assert.match(id, /^[a-f0-9]{64}$/, `Compose did not report a running ${role} container`);
     const container = JSON.parse(run(['inspect', id]))[0];
     return [role, { id, image: container.Config.Image, imageId: container.Image,
-      running: container.State.Running, configHash: container.Config.Labels['com.docker.compose.config-hash'] }];
+      running: container.State.Running, inspection: container }];
   }));
 
-  const assertSnapshotConfigHashes = (env, containers, name) => {
+  const assertSnapshotEffectiveConfig = (env, containers, name) => {
     const stored = path.join(fixture, 'releases/backend-configs', name);
     mkdirSync(path.join(stored, 'compose'), { recursive: true });
     mkdirSync(path.join(stored, 'env/backend'), { recursive: true });
@@ -80,17 +81,21 @@ test('Docker Compose changes selected app process roles, retains other container
       .replaceAll('../secrets/', `${fixture}/secrets/`);
     const expected = path.join(stored, 'compose/effective-check.yml');
     writeFileSync(expected, rendered);
-    const report = run(['compose', '-p', project, '-f', expected, 'config', '--hash', '*'],
-      { env: { ...variables(newSha), ...env }, stdio: 'pipe' });
-    const hashes = Object.fromEntries(report.trim().split('\n').map(line => line.trim().split(/\s+/)));
-    for (const role of roles) assert.equal(hashes[role], containers[role].configHash,
-      `snapshot env resolution must match the live effective configuration for ${role}`);
+    const plan = JSON.parse(run(['compose', '-p', project, '-f', expected, 'config', '--format', 'json'],
+      { env: { ...variables(newSha), ...env }, stdio: 'pipe' }));
+    for (const role of roles) {
+      const imageConfig = JSON.parse(run(['image', 'inspect', containers[role].imageId]))[0].Config;
+      assertEffectiveConfig(plan.services[role], imageConfig, containers[role].inspection, role);
+      const drifted = structuredClone(containers[role].inspection);
+      drifted.Config.Env.push('UNREVIEWED_CONFIG_DRIFT=1');
+      assert.throws(() => assertEffectiveConfig(plan.services[role], imageConfig, drifted, role), /environment drift/);
+    }
   };
 
   const unchanged = { API_GATEWAY_IMAGE_SHA: oldSha, OPERATIONS_IMAGE_SHA: oldSha };
   compose({ ...unchanged, BILLING_IMAGE_SHA: oldSha }, ['up', '-d', ...roles]);
   const baseline = snapshot();
-  assertSnapshotConfigHashes({ ...unchanged, BILLING_IMAGE_SHA: oldSha }, baseline, 'baseline');
+  assertSnapshotEffectiveConfig({ ...unchanged, BILLING_IMAGE_SHA: oldSha }, baseline, 'baseline');
   assert(roles.every(role => baseline[role].running));
   assert.equal(baseline['api-gateway'].image, `aerocrm/api-gateway:${oldSha}`);
   assert.equal(baseline['billing-api'].image, `aerocrm/billing:${oldSha}`);
@@ -103,7 +108,7 @@ test('Docker Compose changes selected app process roles, retains other container
 
   compose({ ...unchanged, BILLING_IMAGE_SHA: newSha }, ['up', '-d', ...roles]);
   const released = snapshot();
-  assertSnapshotConfigHashes({ ...unchanged, BILLING_IMAGE_SHA: newSha }, released, 'released');
+  assertSnapshotEffectiveConfig({ ...unchanged, BILLING_IMAGE_SHA: newSha }, released, 'released');
   assert.equal(released['api-gateway'].id, baseline['api-gateway'].id,
     'unchanged service must keep its existing container');
   assert.equal(released['operations-worker'].id, baseline['operations-worker'].id,
@@ -117,13 +122,13 @@ test('Docker Compose changes selected app process roles, retains other container
 
   compose({ ...unchanged, BILLING_IMAGE_SHA: newSha }, ['up', '-d', ...roles]);
   const repeated = snapshot();
-  assertSnapshotConfigHashes({ ...unchanged, BILLING_IMAGE_SHA: newSha }, repeated, 'same-content-different-snapshot-directory');
+  assertSnapshotEffectiveConfig({ ...unchanged, BILLING_IMAGE_SHA: newSha }, repeated, 'same-content-different-snapshot-directory');
   for (const role of roles) assert.equal(repeated[role].id, released[role].id,
     `repeating the same desired manifest must keep ${role} container`);
 
   compose({ ...unchanged, BILLING_IMAGE_SHA: oldSha }, ['up', '-d', ...roles]);
   const rolledBack = snapshot();
-  assertSnapshotConfigHashes({ ...unchanged, BILLING_IMAGE_SHA: oldSha }, rolledBack, 'rollback');
+  assertSnapshotEffectiveConfig({ ...unchanged, BILLING_IMAGE_SHA: oldSha }, rolledBack, 'rollback');
   assert.equal(rolledBack['api-gateway'].id, released['api-gateway'].id,
     'rollback must preserve the unaffected service container');
   assert.equal(rolledBack['operations-worker'].id, released['operations-worker'].id,
