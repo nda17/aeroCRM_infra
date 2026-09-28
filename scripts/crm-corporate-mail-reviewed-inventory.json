@@ -3,7 +3,8 @@
   "migrations": {
     "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
     "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c",
-    "20260928000000_corporate_mail": "0f21487e131384fef83494d962f474545523ee1a215c5ae1a5928f436919e05f"
+    "20260928000000_corporate_mail": "0f21487e131384fef83494d962f474545523ee1a215c5ae1a5928f436919e05f",
+    "20260928010000_mail_reply_guard_alias": "3f613866d369e94ff20449dbd3a7ec468755cafcb7677f136dd3c7ff04aff8c4"
   },
   "aclSha256": "d6a0aeedee8da3513e0d5805b51fefd1ecff80170a2fa085caa11a297ea24642",
   "mailTables": {
@@ -77,5 +78,13 @@
       "workspace_closure_fence_immutable()"
     ],
     "closureTriggerCount": 4
+  },
+  "previousMailCustomers": {
+    "migrations": {
+      "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
+      "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c",
+      "20260928000000_corporate_mail": "0f21487e131384fef83494d962f474545523ee1a215c5ae1a5928f436919e05f"
+    },
+    "aclSha256": "d6a0aeedee8da3513e0d5805b51fefd1ecff80170a2fa085caa11a297ea24642"
   }
 }

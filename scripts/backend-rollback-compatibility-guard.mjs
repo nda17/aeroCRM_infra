@@ -57,7 +57,8 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
 }
 function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
-  const accepted = service === 'crm-customers' ? [expected, mailInventory.legacyClosureCustomers] : [expected];
+  const accepted = service === 'crm-customers'
+    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -160,7 +161,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.throws(() => assertNoMailData({ mailData: true }), /cannot protect persisted mail data/);
   const customers = closureInventory.owners['crm-customers'];
   const legacy = mailInventory.legacyClosureCustomers;
-  const reviewedPairs = [customers, legacy];
+  const previous = mailInventory.previousMailCustomers;
+  const reviewedPairs = [customers, legacy, previous];
   const reviewCustomers = (pair, crossAcl = false) => {
     let calls = 0;
     const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {
@@ -171,17 +173,20 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
       for (const reviewed of reviewedPairs)
         for (const checksum of Object.values(reviewed.migrations)) assert(script.includes(checksum));
       const inventoryIndex = reviewedPairs.indexOf(pair);
+      const crossed = reviewedPairs.find(reviewed => reviewed.aclSha256 !== pair.aclSha256);
       return JSON.stringify({ migrations: true, inventoryIndex,
-        aclSha: crossAcl ? reviewedPairs[1 - inventoryIndex].aclSha256 : pair.aclSha256 });
+        aclSha: crossAcl ? crossed.aclSha256 : pair.aclSha256 });
     });
     assert.equal(calls, 2);
     return result;
   };
   assert.equal(reviewCustomers(customers), true);
   assert.equal(reviewCustomers(legacy), true);
+  assert.equal(reviewCustomers(previous), true);
   assert.equal(reviewCustomers(customers, true), false);
   assert.equal(reviewCustomers(legacy, true), false);
-  console.log('Backend commerce rollback policy fixtures verified');
+  assert.equal(reviewCustomers(previous, true), false);
+  console.log('Backend rollback policy fixtures verified');
   process.exit(0);
 }
 
