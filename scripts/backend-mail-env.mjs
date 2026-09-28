@@ -95,6 +95,13 @@ export function validateMailBundle(bytes, expectedHash, previousFilesMap = null)
   }
   if (previousFilesMap) {
     check(previousFilesMap.has(mailEnvFiles[0]), 'Previous Customers API env is required');
+    if (api.CRM_MAIL_ENABLED === 'true') {
+      const previousApi = parseMailEnv(previousFilesMap.get(mailEnvFiles[0]));
+      // The rollback snapshot must already retain the key before any writes can
+      // be admitted. Provision it in a disabled release, then enable unchanged.
+      check(keyFields.every(key => previousApi[key] && previousApi[key] === api[key]),
+        'Mail enable requires the same encryption key and id in the previous disabled snapshot');
+    }
     for (const name of mailEnvFiles) {
       if (!previousFilesMap.has(name)) continue;
       const previous = parseMailEnv(previousFilesMap.get(name));

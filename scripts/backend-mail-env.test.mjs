@@ -259,6 +259,103 @@ test('mail gates are uniform and enabling mail requires a valid key and complete
   );
 });
 
+test('mail activation requires a key provisioned during an earlier disabled release and preserves that key', () => {
+  const previousWithoutKey = new Map([
+    [mailEnvFiles[0], envText(apiEnv({ key: null }))],
+  ]);
+  const firstEnable = makeBundle(apiEnv({ enabled: true, secretStorage: true }));
+  rejectedWithoutValues(
+    () =>
+      validateMailBundle(
+        firstEnable.bundle,
+        firstEnable.hash,
+        previousWithoutKey
+      ),
+    [credential.CRM_MAIL_CREDENTIAL_KEY],
+    'Mail enable requires the same encryption key and id in the previous disabled snapshot'
+  );
+  const temp = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'mail-env-first-enable-'))
+  );
+  const source = path.join(temp, 'source');
+  const candidate = path.join(temp, 'candidate');
+  const bundleFile = path.join(temp, 'bundle.json');
+  fs.mkdirSync(source, { mode: 0o700 });
+  const oldApi = envText(apiEnv({ key: null }));
+  fs.writeFileSync(path.join(source, mailEnvFiles[0]), oldApi, { mode: 0o600 });
+  fs.writeFileSync(bundleFile, firstEnable.bundle, { mode: 0o600 });
+  rejectedWithoutValues(
+    () =>
+      stageMailEnvironment({
+        bundleFile,
+        bundleHash: firstEnable.hash,
+        sourceDirectory: source,
+        candidateDirectory: candidate,
+      }),
+    [credential.CRM_MAIL_CREDENTIAL_KEY],
+    'Mail enable requires the same encryption key and id in the previous disabled snapshot'
+  );
+  assert.equal(fs.readFileSync(path.join(source, mailEnvFiles[0]), 'utf8'), oldApi);
+  assert.equal(fs.existsSync(candidate), false);
+  fs.rmSync(temp, { recursive: true, force: true });
+
+  const provisioned = makeBundle(apiEnv({ key: credential }));
+  assert.doesNotThrow(() =>
+    validateMailBundle(provisioned.bundle, provisioned.hash, previousWithoutKey)
+  );
+  const previousProvisioned = new Map([
+    [mailEnvFiles[0], provisioned.files.get(mailEnvFiles[0])],
+  ]);
+  const enabledWithSameKey = makeBundle(
+    apiEnv({ enabled: true, secretStorage: true, key: credential })
+  );
+  assert.doesNotThrow(() =>
+    validateMailBundle(
+      enabledWithSameKey.bundle,
+      enabledWithSameKey.hash,
+      previousProvisioned
+    )
+  );
+
+  const nextKey = {
+    CRM_MAIL_CREDENTIAL_KEY_ID: 'mail-key-v2',
+    CRM_MAIL_CREDENTIAL_KEY: Buffer.alloc(32, 9).toString('base64'),
+  };
+  const rollbackEnable = makeBundle(
+    apiEnv({ enabled: true, secretStorage: true, key: nextKey })
+  );
+  rejectedWithoutValues(
+    () =>
+      validateMailBundle(
+        rollbackEnable.bundle,
+        rollbackEnable.hash,
+        previousWithoutKey
+      ),
+    [nextKey.CRM_MAIL_CREDENTIAL_KEY],
+    'Mail enable requires the same encryption key and id in the previous disabled snapshot'
+  );
+
+  const partialPrevious = new Map([
+    [
+      mailEnvFiles[0],
+      envText({
+        ...apiEnv({ key: null }),
+        CRM_MAIL_CREDENTIAL_KEY_ID: credential.CRM_MAIL_CREDENTIAL_KEY_ID,
+      }),
+    ],
+  ]);
+  rejectedWithoutValues(
+    () =>
+      validateMailBundle(
+        enabledWithSameKey.bundle,
+        enabledWithSameKey.hash,
+        partialPrevious
+      ),
+    [credential.CRM_MAIL_CREDENTIAL_KEY],
+    'Mail enable requires the same encryption key and id in the previous disabled snapshot'
+  );
+});
+
 test('existing encryption key identity and unrelated API settings cannot be removed, changed, or rotated', () => {
   const priorApi = apiEnv({
     key: credential,
@@ -408,7 +505,7 @@ test('mail object storage cannot reuse a backup, support, or avatar access key',
   fs.mkdirSync(source, { mode: 0o700 });
   fs.writeFileSync(
     path.join(source, mailEnvFiles[0]),
-    envText(apiEnv({ key: null })),
+    envText(apiEnv({ key: credential })),
     { mode: 0o600 }
   );
   fs.writeFileSync(
@@ -416,7 +513,9 @@ test('mail object storage cannot reuse a backup, support, or avatar access key',
     envText({ CRM_BACKUP_S3_ACCESS_KEY_ID: s3.CRM_MAIL_S3_ACCESS_KEY_ID }),
     { mode: 0o600 }
   );
-  const next = makeBundle(apiEnv({ enabled: true, secretStorage: true }));
+  const next = makeBundle(
+    apiEnv({ enabled: true, secretStorage: true, key: credential })
+  );
   fs.writeFileSync(bundleFile, next.bundle, { mode: 0o600 });
   rejectedWithoutValues(
     () =>

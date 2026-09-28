@@ -75,7 +75,10 @@ The first release uses a green uniform full manifest, `apply_migration=true`, an
 `/opt/aerocrm/env/migrations/crm-customers.env`. To install the missing workers' env
 and API mail configuration, also set `install_env=true`,
 `backend_env_before_hash`, `mail_env_bundle_hash`, and `backend_env_hash` (the approved
-aggregate **after** the change). Later config/enable releases use
+aggregate **after** the change). Keep all three mail gates `false` and provision
+the valid mail encryption key/id in this first disabled snapshot before enabling.
+The next enable release preserves that exact key/id, so a guarded rollback still
+retains the key needed to read admitted writes. Later config/enable releases use
 `apply_migration=false` with an empty migration hash and retain `install_env=true`.
 An image-only release uses `install_env=false` and leaves both scoped hashes empty.
 Frontend release follows successful backend readiness at the same approved SHA.
@@ -83,8 +86,10 @@ Frontend release follows successful backend readiness at the same approved SHA.
 Prepare only from approved private input and the existing runtime credentials;
 do not regenerate database/service credentials or an existing mail encryption key.
 With all three mail gates explicitly `false`, the three Customers roles can start
-without S3 or encryption settings. Enabling requires a valid 32-byte base64 key/id
-and complete private S3 configuration, with a separate access key restricted to
+without S3 or encryption settings; a keyless disabled release must be followed by
+another disabled release provisioning the key/id before enablement. Enabling
+requires that same valid 32-byte base64 key/id in the previous snapshot and
+complete private S3 configuration, with a separate access key restricted to
 `mail/*`. Backup, Support and avatar access keys cannot be reused. Verify the real
 bucket policy separately; configuration validation does not prove its permissions.
 An existing mail encryption key and key id cannot be removed or rotated by this path.
