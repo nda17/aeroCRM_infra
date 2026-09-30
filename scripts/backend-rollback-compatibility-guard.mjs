@@ -26,6 +26,8 @@ const closureMigration = '20260923030000_workspace_closure';
 const closureOwners = ['crm-access', 'identity', 'billing', 'crm-customers', 'crm-sales', 'crm-intake', 'notification-delivery'];
 const closureInventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure-reviewed-inventory.json', import.meta.url)));
 const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-reviewed-inventory.json', import.meta.url)));
+const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-reviewed-inventory.json', import.meta.url)));
+const importMigration = '20261001000000_crm_file_imports';
 const mailMigration = '20260928000000_corporate_mail';
 const mailWorkspaceMigration = '20260929000000_mail_workspace';
 const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
@@ -59,7 +61,8 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
 function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
   const accepted = service === 'crm-customers'
-    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers] : [expected];
+    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers, importInventory.owners['crm-customers']]
+    : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales']] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -182,7 +185,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   const previous = mailInventory.previousMailCustomers;
   const previousNotifications = mailInventory.previousNotificationsCustomers;
   const previousWorkspace = mailInventory.previousWorkspaceCustomers;
-  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace];
+  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace, importInventory.owners['crm-customers']];
   const reviewCustomers = (pair, crossAcl = false) => {
     let calls = 0;
     const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {
@@ -205,11 +208,13 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(previous), true);
   assert.equal(reviewCustomers(previousNotifications), true);
   assert.equal(reviewCustomers(previousWorkspace), true);
+  assert.equal(reviewCustomers(importInventory.owners['crm-customers']), true);
   assert.equal(reviewCustomers(customers, true), false);
   assert.equal(reviewCustomers(legacy, true), false);
   assert.equal(reviewCustomers(previous, true), false);
   assert.equal(reviewCustomers(previousNotifications, true), false);
   assert.equal(reviewCustomers(previousWorkspace, true), false);
+  assert.equal(reviewCustomers(importInventory.owners['crm-customers'], true), false);
   console.log('Backend rollback policy fixtures verified');
   process.exit(0);
 }
@@ -280,6 +285,12 @@ const mailCapabilities = imageCapabilities(candidateImage('crm-customers'), [mai
 const mailWorkspaceCapabilities = imageCapabilities(candidateImage('crm-customers'), [mailWorkspaceMigration], {
   [mailWorkspaceMigration]: mailInventory.migrations[mailWorkspaceMigration]
 });
+const importCapabilities = Object.fromEntries(['crm-customers','crm-sales'].map(service => [service,
+  imageCapabilities(candidateImage(service), [importMigration], {
+    [importMigration]: importInventory.owners[service].migrations[importMigration]
+  })[0]]));
+assert(Object.values(importCapabilities).every(value => typeof value === 'boolean'),
+  'Invalid CRM file import image compatibility inventory');
 assert(mailWorkspaceCapabilities.length === 1 && typeof mailWorkspaceCapabilities[0] === 'boolean');
 assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
   salesCapabilities.length === 1 && mailCapabilities.length === 1 &&
@@ -288,13 +299,31 @@ assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
 assert(typeof mailCapabilities[0] === 'boolean', 'Invalid mail image compatibility inventory');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
-if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] && mailWorkspaceCapabilities[0]) {
+if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&
+    mailWorkspaceCapabilities[0] && Object.values(importCapabilities).every(Boolean)) {
   console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
   console.error('Candidate backend images require a stopped-writer data compatibility check');
   process.exit(2);
+}
+
+for (const service of ['crm-customers','crm-sales']) if (!importCapabilities[service]) {
+  const schema = service.replace('-', '_');
+  const identity = readDatabaseUrl(`/opt/aerocrm/env/migrations/${service}.env`,
+    `${schema.toUpperCase()}_DATABASE_URL`, {
+      database:`aerocrm_${schema}`,role:`aerocrm_${schema}_migration`,schema
+    });
+  const applied = inspectDatabase(identity, `SELECT EXISTS (SELECT 1 FROM ${schema}._prisma_migrations
+    WHERE migration_name='${importMigration}' AND checksum='${importInventory.owners[service].migrations[importMigration]}'
+      AND finished_at IS NOT NULL AND rolled_back_at IS NULL)::text;`);
+  if (applied) {
+    const data = inspectDatabase(identity, `SELECT json_build_object('persistedImport',
+      EXISTS (SELECT 1 FROM ${schema}.import_previews) OR EXISTS (SELECT 1 FROM ${schema}.import_bindings))::text;`);
+    assert.equal(data.persistedImport, false,
+      `Candidate ${service} image cannot protect persisted CRM file import previews and bindings`);
+  }
 }
 
 if (!mailWorkspaceCapabilities[0]) {

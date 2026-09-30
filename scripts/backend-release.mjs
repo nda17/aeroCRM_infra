@@ -26,21 +26,25 @@ if (args[0] !== '--locked') {
 args.shift();
 const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
   commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
-  closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = ''] = args;
+  closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = '',
+  fileImports = 'false', fileImportsHash = ''] = args;
 assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
 assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
 assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
 assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
-assert(args.length >= 3 && args.length <= 17, 'Invalid backend release argument count');
+assert(args.length >= 3 && args.length <= 19, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
-  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash]];
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash]];
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
 }
 assert.equal(billing, custom, 'Billing and custom-role hooks must be paired');
+if (fileImports === 'true')
+  assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail].every(value => value === 'false'),
+    'CRM file imports cannot combine migration hooks');
 if (closureMigration === 'true' || aclRepair === 'true')
-  assert([billing, commerce, intake, mail].every(value => value === 'false') &&
+  assert([billing, commerce, intake, mail, fileImports].every(value => value === 'false') &&
     !(closureMigration === 'true' && aclRepair === 'true'), 'Incompatible migration flags');
 const stagedRoot = fs.realpathSync(process.env.REVIEWED_INFRA_DIR ?? path.dirname(path.dirname(script)));
 assert(stagedRoot.startsWith(`${root}/releases/staging/`), 'Reviewed infra must be staged per run');
@@ -54,7 +58,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -64,7 +68,7 @@ assert(['true', 'false'].includes(mailEnvInstall), 'Invalid Customers env instal
 assert(mailEnvInstall === 'true' ? /^[a-f0-9]{64}$/.test(mailEnvBeforeHash) &&
   /^[a-f0-9]{64}$/.test(mailEnvBundleHash) : !mailEnvBeforeHash && !mailEnvBundleHash,
   'Invalid reviewed Customers env hashes');
-assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair].every(value => value === 'false'),
+assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair, fileImports].every(value => value === 'false'),
   'Customers env installation cannot combine unrelated migration hooks');
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
@@ -278,7 +282,8 @@ function compatibility(state) {
 function runMigrations() {
   const hooks = [['billing-capacity-migration.mjs', billing, billingHash],
     ['crm-custom-roles-migration.mjs', custom, customHash], ['crm-sales-commerce-migration.mjs', commerce, commerceHash],
-    ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash], ['crm-corporate-mail-migration.mjs', mail, mailHash]];
+    ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash], ['crm-corporate-mail-migration.mjs', mail, mailHash],
+    ['crm-file-imports-migration.mjs', fileImports, fileImportsHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
