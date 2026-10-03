@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "crm-sales": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "e9cf8e4a39ea31ea0663edea98e8fe97ebb50ee68be9bc1e8b3f8d8d3a6c2c9a",
+        "20260923010000_sales_commerce": "04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433",
+        "20260923030000_workspace_closure": "bb118b4953dbb143cd79e8c6b1c453958c88a38ac709bc57e1c33235c29e7d4a",
+        "20261001000000_crm_file_imports": "d2c22df0df205a6b877db8cbc63cd79ad282597503f2cef7ae296a1bc668cd3a",
+        "20261004000000_planner_customization": "36c56d3211d194b511b433222568ed3b9ae0d6f46b0bf45b41afe65b3f9289ad"
+      },
+      "aclSha256": "e43d8f2afcbb3b36039a1ce5cb310e99a1830ed0fcd5c4a1be0a6259112fc0b3",
+      "migration": "20261004000000_planner_customization",
+      "newTables": {
+        "planner_settings": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "planner_board_columns": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "planner_command_receipts": [
+          "SELECT",
+          "INSERT"
+        ]
+      },
+      "newRoutines": [
+        "guard_planner_board_column_identity",
+        "normalize_task_board_column"
+      ],
+      "triggerTables": [
+        "planner_board_columns",
+        "planner_command_receipts",
+        "planner_settings"
+      ],
+      "newTriggers": [
+        "planner_board_columns:guard_workspace_closure:guard_workspace_business_write",
+        "planner_board_columns:planner_board_column_identity:guard_planner_board_column_identity",
+        "planner_board_columns:planner_columns_live_change:notify_live_change",
+        "planner_command_receipts:guard_workspace_closure:guard_workspace_business_write",
+        "planner_command_receipts:planner_commands_append_only:reject_reminder_command_mutation",
+        "planner_command_receipts:planner_commands_no_truncate:reject_reminder_command_mutation",
+        "planner_settings:guard_workspace_closure:guard_workspace_business_write",
+        "planner_settings:planner_settings_live_change:notify_live_change",
+        "tasks:tasks_planner_column:normalize_task_board_column"
+      ],
+      "routineBodySha256": {
+        "guard_planner_board_column_identity": "50150258a46fcffa0b591415559572f91c5a8dddeb8e6e77625cb37b84237617",
+        "normalize_task_board_column": "7d69921342eaa967bd8c4882e365ba16d0bb9f8e1b1f96a8e33e897fa3c7018b"
+      }
+    },
+    "identity": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "45bef30c1974a8abdb0928fe82eb1e6f446c6420f35bbea2c44cf32177b134d2",
+        "20260920120000_oauth_workspace_client": "7c8768e78bd04d77a53a4ca5fe1bf3ab251e3bb879ccf1a8c9908af2a38b19a1",
+        "20260923030000_workspace_closure": "c870b738c75153e0d6f2883395a8ebd5dad197b87b8f2ea9262ca0c00a355be0",
+        "20261004000000_single_active_session": "d07b489fb79b7eca075e200961ab4197ad38853d99ff031915675565febbeb7d"
+      },
+      "aclSha256": "2dadeaca4716c62cb85a42e6579b40e969f988188fd327a9982ba7f007439805",
+      "migration": "20261004000000_single_active_session",
+      "newTables": {},
+      "newRoutines": [
+        "enforce_single_active_session",
+        "notify_session_revoked"
+      ],
+      "triggerTables": [
+        "user_sessions"
+      ],
+      "newTriggers": [
+        "user_sessions:user_sessions_revocation_signal:notify_session_revoked",
+        "user_sessions:user_sessions_single_active:enforce_single_active_session"
+      ],
+      "routineBodySha256": {
+        "enforce_single_active_session": "9e740d79d18e5c360e7374a9b9d7248bbee33948e454ad5cfffbdf70b95c828e",
+        "notify_session_revoked": "fc50934c47b05267c55c4dbfba4040e9e21eda8c6614aa9bcb42cfc9c7a72373"
+      },
+      "previousCompatibleSha": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    }
+  }
+}

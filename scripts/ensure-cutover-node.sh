@@ -15,6 +15,7 @@ case "${1:-}" in
   --crm-sales-commerce) checked_scripts=(crm-sales-commerce-migration.mjs) ;;
   --crm-corporate-mail) checked_scripts=(crm-corporate-mail-migration.mjs) ;;
   --crm-file-imports) checked_scripts=(crm-file-imports-migration.mjs) ;;
+  --crm-planner-customization) checked_scripts=(crm-planner-customization-migration.mjs) ;;
   --crm-intake-notifications) checked_scripts=(crm-intake-notifications-migration.mjs) ;;
   --rollback-guard) checked_scripts=(backend-rollback-compatibility-guard.mjs backend-release-state.mjs backend-release-transaction.mjs backend-release.mjs) ;;
   *) echo 'Unknown Node verification mode' >&2; exit 64 ;;

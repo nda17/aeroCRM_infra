@@ -28,6 +28,7 @@ const closureInventory = JSON.parse(fs.readFileSync(new URL('./workspace-closure
 const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-reviewed-inventory.json', import.meta.url)));
 const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-reviewed-inventory.json', import.meta.url)));
 const importMigration = '20261001000000_crm_file_imports';
+const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-customization-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
 const mailWorkspaceMigration = '20260929000000_mail_workspace';
 const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
@@ -62,7 +63,8 @@ function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
   const accepted = service === 'crm-customers'
     ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers, importInventory.owners['crm-customers']]
-    : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales']] : [expected];
+    : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales'], plannerInventory.owners['crm-sales']]
+      : service === 'identity' ? [expected, plannerInventory.owners.identity] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -105,6 +107,26 @@ function mailWorkspaceDataQuery() {
 function assertNoMailWorkspaceData(state) {
   assert.equal(state.mailWorkspaceData, false,
     'Old Customers image cannot protect persisted standalone mail; retain a compatible image and fix forward');
+}
+
+function singleSessionPolicyQuery() {
+  const entry = plannerInventory.owners.identity;
+  const routineBodies = Object.entries(entry.routineBodySha256).map(([name, hash]) => `(SELECT NOT prosecdef AND encode(sha256(convert_to(prosrc,'UTF8')),'hex')='${hash}'
+    FROM pg_proc WHERE oid='identity.${name}()'::regprocedure)`);
+  return `SELECT json_build_object('singleSessionPolicy',
+    EXISTS (SELECT 1 FROM pg_index i WHERE i.indexrelid='identity.user_sessions_one_active_per_user'::regclass
+      AND i.indisunique AND i.indisvalid AND i.indnkeyatts=1 AND pg_get_expr(i.indpred,i.indrelid)='(revoked_at IS NULL)'
+      AND i.indkey[0]=(SELECT attnum FROM pg_attribute WHERE attrelid='identity.user_sessions'::regclass AND attname='user_id'))
+    AND ${routineBodies.join(' AND ')}
+    AND (SELECT array_agg(t.tgname||':'||p.proname ORDER BY t.tgname) FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+      WHERE t.tgrelid='identity.user_sessions'::regclass AND NOT t.tgisinternal AND t.tgenabled='O' AND t.tgqual IS NULL)
+      = ARRAY['user_sessions_revocation_signal:notify_session_revoked','user_sessions_single_active:enforce_single_active_session']::text[])::text;`;
+}
+function assertLegacySingleSession(candidate, state) {
+  assert.equal(candidate, plannerInventory.owners.identity.previousCompatibleSha,
+    'Only the reviewed pre-migration Identity baseline may recover after the single-session migration');
+  assert.equal(state.singleSessionPolicy, true,
+    'Reviewed Identity recovery requires the exact single-session database guards to remain enforced');
 }
 
 function readDatabaseUrl(file, key, identity) {
@@ -159,7 +181,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     assert(args.includes('none'));
     assert(args.at(-1).includes(closureInventory.owners.identity.aclSha256) === false);
     assert(args.at(-1).includes(closureInventory.owners.identity.migrations[closureMigration]));
-    return JSON.stringify({ migrations: true, aclSha: closureInventory.owners.identity.aclSha256 });
+    return JSON.stringify({ migrations: true, inventoryIndex: 0, aclSha: closureInventory.owners.identity.aclSha256 });
   }));
   assert.equal(calls, 2);
   assert.equal(closureImageReviewed('identity', 'a'.repeat(40), (_label, _executable, args) =>
@@ -215,6 +237,10 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(previousNotifications, true), false);
   assert.equal(reviewCustomers(previousWorkspace, true), false);
   assert.equal(reviewCustomers(importInventory.owners['crm-customers'], true), false);
+  assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: true });
+  assert.throws(() => assertLegacySingleSession('0'.repeat(40), { singleSessionPolicy: true }), /reviewed pre-migration Identity baseline/);
+  assert.throws(() => assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: false }), /exact single-session database guards/);
+  assert(singleSessionPolicyQuery().includes('user_sessions_one_active_per_user'));
   console.log('Backend rollback policy fixtures verified');
   process.exit(0);
 }
@@ -297,16 +323,38 @@ assert(crmCapabilities.length === 3 && billingCapabilities.length === 1 &&
   [...crmCapabilities, ...billingCapabilities, ...salesCapabilities].every(value => typeof value === 'boolean'),
   'Candidate image compatibility inventory is invalid');
 assert(typeof mailCapabilities[0] === 'boolean', 'Invalid mail image compatibility inventory');
+const plannerCapabilities = Object.fromEntries(Object.entries(plannerInventory.owners).map(([service, entry]) => [service,
+  imageCapabilities(candidateImage(service), [entry.migration], { [entry.migration]: entry.migrations[entry.migration] })[0]]));
+assert(Object.values(plannerCapabilities).every(value => typeof value === 'boolean'), 'Invalid planner/session image compatibility inventory');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&
-    mailWorkspaceCapabilities[0] && Object.values(importCapabilities).every(Boolean)) {
+    mailWorkspaceCapabilities[0] && Object.values(importCapabilities).every(Boolean) && Object.values(plannerCapabilities).every(Boolean)) {
   console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
   console.error('Candidate backend images require a stopped-writer data compatibility check');
   process.exit(2);
+}
+
+for (const [service, entry] of Object.entries(plannerInventory.owners)) if (!plannerCapabilities[service]) {
+  const schema = service.replace('-', '_');
+  const identity = readDatabaseUrl(`/opt/aerocrm/env/migrations/${service}.env`, `${schema.toUpperCase()}_DATABASE_URL`, {
+    database:`aerocrm_${schema}`, role:`aerocrm_${schema}_migration`, schema
+  });
+  const applied = inspectDatabase(identity, `SELECT EXISTS (SELECT 1 FROM ${schema}._prisma_migrations
+    WHERE migration_name='${entry.migration}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL)::text;`);
+  if (applied) {
+    if (service === 'identity') {
+      assertLegacySingleSession(candidateManifest?.services.identity.sourceSha ?? candidateSha, inspectDatabase(identity, singleSessionPolicyQuery()));
+      continue;
+    }
+    const data = inspectDatabase(identity, `SELECT json_build_object('persistedPlanner',
+      EXISTS (SELECT 1 FROM crm_sales.planner_settings) OR EXISTS (SELECT 1 FROM crm_sales.planner_board_columns)
+      OR EXISTS (SELECT 1 FROM crm_sales.planner_command_receipts) OR EXISTS (SELECT 1 FROM crm_sales.tasks WHERE board_column_id IS NOT NULL))::text;`);
+    assert.equal(data.persistedPlanner, false, 'Candidate CRM Sales image cannot preserve persisted planner configuration and task placement');
+  }
 }
 
 for (const service of ['crm-customers','crm-sales']) if (!importCapabilities[service]) {

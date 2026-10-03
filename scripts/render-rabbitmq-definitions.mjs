@@ -33,8 +33,8 @@ function runtimeNames() {
   const section = renderer.match(/const roles = \[([\s\S]*?)\n\];/);
   if (!section) throw new Error('Cannot read the runtime role contract');
   const roles = [...section[1].matchAll(/\['([^']+)',\s*'([^']+)',\s*\d+(?:,\s*'([^']+)')?\]/g)];
-  if (roles.length !== 29) throw new Error('Runtime role contract changed');
-  const names = roles.filter(([, , role]) => !['api', 'scheduler'].includes(role))
+  if (roles.length !== 31) throw new Error('Runtime role contract changed');
+  const names = roles.filter(([, service, role]) => !['api', 'scheduler'].includes(role) && service !== 'crm-customers')
     .map(([, service, role, explicit]) => explicit || `${service}-${role}`);
   if (names.length !== 19 || new Set(names).size !== names.length)
     throw new Error('Broker principal contract changed');

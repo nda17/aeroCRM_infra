@@ -382,3 +382,22 @@ applied hashes in its root-owned state. After deployment, verify GET bytes and S
 HEAD, a small Range request, POST 405, query 400, and no redirect or `Set-Cookie` through
 the same-origin route. A published S3 version cannot be replaced with
 different bytes. Signing keys and their encrypted backup stay outside Git and S3.
+
+## Planner and single-session release
+
+The `planner-customization-release.yml` wrapper runs one reviewed full-backend
+release with `crm_planner_customization_migration=true`. Its migration hash is
+SHA-256 of sorted `sha256sum` lines for `./crm-sales.env` and `./identity.env`
+in the private VPS migration directory. The hook checks both exact-SHA image
+inventories and both live migration histories before applying either owner,
+then verifies service-owned ACL, guard bodies, triggers, the planner composite
+FK and the single-active-session partial unique index before switching images.
+A partial attempt is resumed with the same immutable release SHA.
+
+Rollback retains the SQL session policy. The exact reviewed previous Identity
+baseline `26e65ad03d535fb7446dcac72dec4251ec820715` may recover after migration
+only while all new database guards remain intact; live revocation notification
+UX may degrade on that baseline. Other images lacking the new migration are
+rejected. An old Sales image is rejected once planner configuration or task
+placements exist. The canonical controller keeps its existing compatibility,
+readiness, exact-image, configuration and durable release-state checks.

@@ -49,7 +49,9 @@ crm_corporate_mail_migration=${16:-false}
 crm_corporate_mail_migration_env_hash=${17:-}
 crm_file_imports_migration=${18:-false}
 crm_file_imports_migration_env_hash=${19:-}
-[[ $# -le 19 ]] || exit 64
+crm_planner_customization_migration=${20:-false}
+crm_planner_customization_migration_env_hash=${21:-}
+[[ $# -le 21 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -95,6 +97,15 @@ if [[ "$crm_file_imports_migration" == true ]]; then
 else
   [[ "$crm_file_imports_migration" == false && -z "$crm_file_imports_migration_env_hash" ]] || exit 64
 fi
+if [[ "$crm_planner_customization_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_planner_customization_migration_env_hash" =~ ^[a-f0-9]{64}$ &&
+    "$billing_capacity_migration" == false && "$crm_custom_roles_migration" == false &&
+    "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
+    "$crm_corporate_mail_migration" == false && "$crm_file_imports_migration" == false &&
+    "$workspace_closure_migration" == false && "$workspace_closure_identity_acl_repair" == false ]] || exit 64
+else
+  [[ "$crm_planner_customization_migration" == false && -z "$crm_planner_customization_migration_env_hash" ]] || exit 64
+fi
 if [[ "$workspace_closure_migration" == true ]]; then
   [[ "$role" == backend && "$billing_capacity_migration" == false &&
     "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
@@ -122,6 +133,10 @@ if [[ "$crm_corporate_mail_migration" == true ]]; then
 fi
 if [[ "$crm_file_imports_migration" == true ]]; then
   echo 'CRM file import migrations require the full canonical backend manifest controller' >&2
+  exit 1
+fi
+if [[ "$crm_planner_customization_migration" == true ]]; then
+  echo 'CRM planner customization migration requires the full canonical backend manifest controller' >&2
   exit 1
 fi
 if [[ "$role" == backend && -f /opt/aerocrm/releases/backend-state.json ]]; then
