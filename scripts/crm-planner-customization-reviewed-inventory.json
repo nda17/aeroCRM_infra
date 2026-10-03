@@ -59,7 +59,7 @@
         "20260923030000_workspace_closure": "c870b738c75153e0d6f2883395a8ebd5dad197b87b8f2ea9262ca0c00a355be0",
         "20261004000000_single_active_session": "d07b489fb79b7eca075e200961ab4197ad38853d99ff031915675565febbeb7d"
       },
-      "aclSha256": "2dadeaca4716c62cb85a42e6579b40e969f988188fd327a9982ba7f007439805",
+      "aclSha256": "ccd364a11ac413b2ae905470e9401d93aa2a13f2b1846481d2767ef970b39493",
       "migration": "20261004000000_single_active_session",
       "newTables": {},
       "newRoutines": [
