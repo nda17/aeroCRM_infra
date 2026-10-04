@@ -29,6 +29,7 @@ const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-r
 const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-reviewed-inventory.json', import.meta.url)));
 const importMigration = '20261001000000_crm_file_imports';
 const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-customization-reviewed-inventory.json', import.meta.url)));
+const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
 const mailWorkspaceMigration = '20260929000000_mail_workspace';
 const commerceChecksum = '04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433';
@@ -63,8 +64,9 @@ function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
   const accepted = service === 'crm-customers'
     ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers, importInventory.owners['crm-customers']]
-    : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales'], plannerInventory.owners['crm-sales']]
-      : service === 'identity' ? [expected, plannerInventory.owners.identity] : [expected];
+    : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales'], plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales']]
+      : service === 'identity' ? [expected, plannerInventory.owners.identity]
+        : service === 'crm-access' ? [expected, uxInventory.owners['crm-access']] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -107,6 +109,21 @@ function mailWorkspaceDataQuery() {
 function assertNoMailWorkspaceData(state) {
   assert.equal(state.mailWorkspaceData, false,
     'Old Customers image cannot protect persisted standalone mail; retain a compatible image and fix forward');
+}
+function uxPersistedDataQuery(service) {
+  if (service === 'crm-access') return `SELECT json_build_object('persistedUx',
+    EXISTS (SELECT 1 FROM crm_access.crm_saved_views)
+    OR EXISTS (SELECT 1 FROM crm_access.crm_team_command_receipts WHERE command_type IN
+      ('CREATE_SAVED_VIEW','RENAME_SAVED_VIEW','DELETE_SAVED_VIEW','IMPORT_SAVED_VIEWS')))::text;`;
+  assert.equal(service, 'crm-sales');
+  return `SELECT json_build_object('persistedUx',
+    EXISTS (SELECT 1 FROM crm_sales.deal_timeline WHERE kind IN
+      ('CALL_REACHED','CALL_NO_ANSWER','MEETING_HELD'))
+    OR EXISTS (SELECT 1 FROM crm_sales.command_receipts WHERE command_type='RECORD_INTERACTION_RESULT'))::text;`;
+}
+function assertNoUxData(service, state) {
+  assert.equal(state.persistedUx, false,
+    `Candidate ${service} image cannot protect persisted CRM UX results, views, or receipts`);
 }
 
 function singleSessionPolicyQuery() {
@@ -241,6 +258,11 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.throws(() => assertLegacySingleSession('0'.repeat(40), { singleSessionPolicy: true }), /reviewed pre-migration Identity baseline/);
   assert.throws(() => assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: false }), /exact single-session database guards/);
   assert(singleSessionPolicyQuery().includes('user_sessions_one_active_per_user'));
+  for (const service of ['crm-access','crm-sales']) {
+    assert(uxPersistedDataQuery(service).includes('command_type'));
+    assertNoUxData(service, {persistedUx:false});
+    assert.throws(() => assertNoUxData(service, {persistedUx:true}), /cannot protect persisted CRM UX/);
+  }
   console.log('Backend rollback policy fixtures verified');
   process.exit(0);
 }
@@ -326,16 +348,32 @@ assert(typeof mailCapabilities[0] === 'boolean', 'Invalid mail image compatibili
 const plannerCapabilities = Object.fromEntries(Object.entries(plannerInventory.owners).map(([service, entry]) => [service,
   imageCapabilities(candidateImage(service), [entry.migration], { [entry.migration]: entry.migrations[entry.migration] })[0]]));
 assert(Object.values(plannerCapabilities).every(value => typeof value === 'boolean'), 'Invalid planner/session image compatibility inventory');
+const uxCapabilities = Object.fromEntries(Object.entries(uxInventory.owners).map(([service, entry]) => [service,
+  imageCapabilities(candidateImage(service), [entry.migration], { [entry.migration]: entry.migrations[entry.migration] })[0]]));
+assert(Object.values(uxCapabilities).every(value => typeof value === 'boolean'), 'Invalid CRM UX image compatibility inventory');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&
-    mailWorkspaceCapabilities[0] && Object.values(importCapabilities).every(Boolean) && Object.values(plannerCapabilities).every(Boolean)) {
+    mailWorkspaceCapabilities[0] && Object.values(importCapabilities).every(Boolean) &&
+    Object.values(plannerCapabilities).every(Boolean) && Object.values(uxCapabilities).every(Boolean)) {
   console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
   console.error('Candidate backend images require a stopped-writer data compatibility check');
   process.exit(2);
+}
+
+for (const [service, entry] of Object.entries(uxInventory.owners)) if (!uxCapabilities[service]) {
+  const schema = service.replace('-', '_');
+  const identity = readDatabaseUrl(`/opt/aerocrm/env/migrations/${service}.env`,
+    `${schema.toUpperCase()}_DATABASE_URL`, {
+      database:`aerocrm_${schema}`,role:`aerocrm_${schema}_migration`,schema
+    });
+  const applied = inspectDatabase(identity, `SELECT EXISTS (SELECT 1 FROM ${schema}._prisma_migrations
+    WHERE migration_name='${entry.migration}' AND checksum='${entry.migrations[entry.migration]}'
+      AND finished_at IS NOT NULL AND rolled_back_at IS NULL)::text;`);
+  if (applied) assertNoUxData(service, inspectDatabase(identity, uxPersistedDataQuery(service)));
 }
 
 for (const [service, entry] of Object.entries(plannerInventory.owners)) if (!plannerCapabilities[service]) {

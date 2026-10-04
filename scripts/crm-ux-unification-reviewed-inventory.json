@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "crm-access": {
+      "migration": "20261005010000_crm_saved_views",
+      "migrations": {
+        "20260920000000_init_aerocrm": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14",
+        "20260921020000_add_crm_custom_member_role": "2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514",
+        "20260921020100_crm_custom_roles": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876",
+        "20260921030100_crm_admin_seat_capacity": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d",
+        "20260923030000_workspace_closure": "bf58555641fe010e897ae2d4af2152fa4078c6a86a3fded7c502c1c5476c9cc6",
+        "20261005010000_crm_saved_views": "25eae1ded34a19affaa4a6286f38175c58dc50d214e842c1a5adf6321b885cb1"
+      },
+      "aclSha256": "5d15b80b734e84b589d62d8555ead43743f2919afc44ecbb92e294812a99ff20",
+      "tables": [
+        "_prisma_migrations",
+        "crm_admissions",
+        "crm_billing_capacity",
+        "crm_billing_operations",
+        "crm_custom_roles",
+        "crm_employee_profiles",
+        "crm_invitation_intents",
+        "crm_member_teams",
+        "crm_saved_views",
+        "crm_team_audit",
+        "crm_team_command_receipts",
+        "crm_team_deliveries",
+        "crm_team_outbox",
+        "crm_teams",
+        "crm_workspace_access",
+        "crm_workspace_branding",
+        "crm_workspace_closures",
+        "crm_workspace_members",
+        "service_identity",
+        "workspace_closure_fences"
+      ],
+      "sequences": {
+        "crm_admissions_position_seq": [
+          "SELECT",
+          "USAGE"
+        ]
+      },
+      "types": [
+        "CrmAccessLifecycle",
+        "CrmMemberRole"
+      ],
+      "routines": [
+        "assert_workspace_open",
+        "enforce_service_identity_integrity",
+        "enforce_workspace_closure_fence",
+        "enforce_workspace_closure_operation",
+        "guard_billing_capacity",
+        "guard_billing_operation",
+        "guard_workspace_business",
+        "guard_workspace_intent",
+        "is_valid_custom_role_permissions",
+        "reject_team_history_mutation"
+      ],
+      "routineExecute": [
+        "assert_workspace_open(uuid)",
+        "is_valid_custom_role_permissions(text[])"
+      ]
+    },
+    "crm-sales": {
+      "migration": "20261005000000_interaction_results",
+      "migrations": {
+        "20260920000000_init_aerocrm": "e9cf8e4a39ea31ea0663edea98e8fe97ebb50ee68be9bc1e8b3f8d8d3a6c2c9a",
+        "20260923010000_sales_commerce": "04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433",
+        "20260923030000_workspace_closure": "bb118b4953dbb143cd79e8c6b1c453958c88a38ac709bc57e1c33235c29e7d4a",
+        "20261001000000_crm_file_imports": "d2c22df0df205a6b877db8cbc63cd79ad282597503f2cef7ae296a1bc668cd3a",
+        "20261004000000_planner_customization": "36c56d3211d194b511b433222568ed3b9ae0d6f46b0bf45b41afe65b3f9289ad",
+        "20261005000000_interaction_results": "1d1c8a5544ed021ca18f74c240530f715d6e5086c9c889fb8977ff8a0037fd75"
+      },
+      "aclSha256": "e43d8f2afcbb3b36039a1ce5cb310e99a1830ed0fcd5c4a1be0a6259112fc0b3",
+      "tables": [
+        "_prisma_migrations",
+        "command_receipts",
+        "commerce_catalog_items",
+        "commerce_commands",
+        "commerce_deal_lines",
+        "commerce_events",
+        "commerce_import_previews",
+        "commerce_payments",
+        "commerce_quotes",
+        "deal_timeline",
+        "deals",
+        "export_audit",
+        "import_bindings",
+        "import_previews",
+        "intake_operation_commands",
+        "intake_operation_slots",
+        "pipeline_stages",
+        "pipeline_template_installation_commands",
+        "pipeline_template_installations",
+        "pipelines",
+        "planner_board_columns",
+        "planner_command_receipts",
+        "planner_settings",
+        "reminder_deliveries",
+        "reminder_jobs",
+        "reminder_outbox",
+        "reminder_rule_commands",
+        "reminder_rules",
+        "reminder_runtime",
+        "service_identity",
+        "task_command_receipts",
+        "task_notifications",
+        "task_series",
+        "task_series_commands",
+        "task_series_occurrences",
+        "task_timeline",
+        "tasks",
+        "workspace_closure_fences"
+      ],
+      "sequences": {},
+      "types": [
+        "CrmPipelineStageState",
+        "SalesTaskStatus"
+      ],
+      "routines": [
+        "assert_workspace_open",
+        "check_sales_next_action",
+        "enforce_service_identity_integrity",
+        "guard_planner_board_column_identity",
+        "guard_task_series_identity",
+        "guard_workspace_business_write",
+        "import_binding_immutable",
+        "import_preview_immutable",
+        "normalize_task_board_column",
+        "notify_live_change",
+        "record_task_notifications",
+        "reject_commerce_immutable_mutation",
+        "reject_intake_proof_mutation",
+        "reject_reminder_command_mutation",
+        "track_task_assignment",
+        "wake_task_reminders",
+        "workspace_closure_fence_immutable"
+      ],
+      "routineExecute": [
+        "assert_workspace_open(uuid)"
+      ]
+    }
+  },
+  "previousAccess": {
+    "migrations": {
+      "20260920000000_init_aerocrm": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14",
+      "20260921020000_add_crm_custom_member_role": "2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514",
+      "20260921020100_crm_custom_roles": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876",
+      "20260921030100_crm_admin_seat_capacity": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d",
+      "20260923030000_workspace_closure": "bf58555641fe010e897ae2d4af2152fa4078c6a86a3fded7c502c1c5476c9cc6"
+    },
+    "aclSha256": "b46577f382eef823e1e79723744027420f880b0d1f8d0a0d70f76569ab6713d1"
+  }
+}
