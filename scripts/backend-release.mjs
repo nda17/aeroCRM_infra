@@ -198,9 +198,6 @@ function recoverRabbitmq(previous, target = null) {
   const repaired = recoverRabbitmqConfig({ liveFile: `${root}/compose/rabbitmq.conf`, approvedFiles,
     inspect: rabbitmqContainers, waitForHealth: waitForRabbitmqHealth });
   if (repaired) console.log('Verified RabbitMQ config permissions repaired on the existing bind source');
-  // Pending retries may intentionally have stopped or mixed writer roles.
-  // Their original transaction verifies the complete target after switching.
-  if (!target) readiness(previous);
 }
 const effectivePlans = new Map();
 const imageConfigs = new Map();

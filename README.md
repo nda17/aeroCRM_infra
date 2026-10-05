@@ -69,9 +69,8 @@ marker writes keep `0600`. Under `release.lock`, a release first checks the live
 RabbitMQ file against the validated previous snapshot (or previous/target during
 an exact pending retry), its owner and inode, and the existing broker container's
 labels, read-only bind and restart policy. A known `0600` file is repaired in place;
-the controller waits for automatic broker health, then checks dependent readiness
-for a coherent baseline before continuing normal runtime and rollback guards.
-An explicitly stopped broker or
+the controller waits for automatic broker health before continuing normal runtime
+and release readiness guards. An explicitly stopped broker or
 unrecognized file fails closed. The broker volume, users and queues are preserved.
 
 Infrastructure CI runs strict manifest/runtime fixtures, interrupted-switch and rollback
