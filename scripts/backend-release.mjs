@@ -12,6 +12,7 @@ import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateStat
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
+import { atomic, publishRabbitmqConfig, recoverRabbitmqConfig, validateRabbitmqContainer } from './backend-rabbitmq-config.mjs';
 
 const root = '/opt/aerocrm';
 const script = fileURLToPath(import.meta.url);
@@ -94,14 +95,6 @@ function execute(label, command, commandArgs, options = {}) {
 }
 function digest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function readMarker(name) { return fs.existsSync(`${releases}/${name}`) ? fs.readFileSync(`${releases}/${name}`, 'utf8').trim() : ''; }
-function atomic(file, value) {
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  const fd = fs.openSync(temporary, 'wx', 0o600);
-  try { fs.writeFileSync(fd, value); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  fs.renameSync(temporary, file);
-  const directory = fs.openSync(path.dirname(file), 'r');
-  try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
-}
 function writeJson(file, value) { atomic(file, `${JSON.stringify(value, null, 2)}\n`); }
 function envHash(directory) {
   return execute('Environment hash', 'bash', ['-c',
@@ -180,6 +173,34 @@ function runtime() {
       image: c.Config.Image, revision: c.Config.Env.find(value => value.startsWith('APP_REVISION='))?.slice(13), running: c.State.Running,
       inspection: c,
       closureGate: c.Config.Env.find(value => value.startsWith('CRM_ACCESS_CLOSURE_ENABLED='))?.split('=')[1] }));
+}
+function rabbitmqContainers() {
+  const ids = execute('RabbitMQ runtime inventory', 'docker', ['ps', '-aq',
+    '--filter', 'label=com.docker.compose.project=aerocrm-backend',
+    '--filter', 'label=com.docker.compose.service=rabbitmq']).split('\n').filter(Boolean);
+  assert.equal(ids.length, 1, 'Expected one existing RabbitMQ container');
+  return JSON.parse(execute('RabbitMQ runtime inspection', 'docker', ['inspect', ...ids]));
+}
+function waitForRabbitmqHealth(id) {
+  const deadline = Date.now() + 180_000;
+  do {
+    const containers = rabbitmqContainers();
+    assert.equal(validateRabbitmqContainer(containers, `${root}/compose/rabbitmq.conf`), id,
+      'RabbitMQ container changed during automatic recovery');
+    if (containers[0].State.Health?.Status === 'healthy') return;
+    if (Date.now() >= deadline) break;
+    execute('RabbitMQ health wait', 'sleep', ['2']);
+  } while (true);
+  throw new Error('RabbitMQ did not regain Docker health within 180 seconds');
+}
+function recoverRabbitmq(previous, target = null) {
+  const approvedFiles = [previous, target].filter(Boolean).map(state => `${configDirectory(state)}/compose/rabbitmq.conf`);
+  const repaired = recoverRabbitmqConfig({ liveFile: `${root}/compose/rabbitmq.conf`, approvedFiles,
+    inspect: rabbitmqContainers, waitForHealth: waitForRabbitmqHealth });
+  if (repaired) console.log('Verified RabbitMQ config permissions repaired on the existing bind source');
+  // Pending retries may intentionally have stopped or mixed writer roles.
+  // Their original transaction verifies the complete target after switching.
+  if (!target) readiness(previous);
 }
 const effectivePlans = new Map();
 const imageConfigs = new Map();
@@ -263,7 +284,8 @@ function applyConfiguration(state) {
   for (const name of expected) atomic(`${root}/env/backend/${name}`, fs.readFileSync(`${source}/${name}`));
   for (const name of fs.readdirSync(`${root}/env/backend`).filter(name => name.endsWith('.env')))
     if (!expected.includes(name)) fs.rmSync(`${root}/env/backend/${name}`);
-  for (const name of ['backend.yml', 'rabbitmq.conf']) atomic(`${root}/compose/${name}`, fs.readFileSync(`${configDirectory(state)}/compose/${name}`));
+  atomic(`${root}/compose/backend.yml`, fs.readFileSync(`${configDirectory(state)}/compose/backend.yml`));
+  publishRabbitmqConfig(`${root}/compose/rabbitmq.conf`, fs.readFileSync(`${configDirectory(state)}/compose/rabbitmq.conf`));
   // Persist per-service substitutions for legacy docker-compose invocations after adoption.
   atomic(`${releases}/backend-images.env`, Object.entries({ IMAGE_SHA: state.manifest.releaseSha, ...imageVariables(state.manifest) })
     .map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
@@ -369,6 +391,7 @@ if (mailEnvInstall === 'true') {
 } else snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
 rolesForPlan(expectedEffectivePlan(target), true);
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
+recoverRabbitmq(previous, pending ? target : null);
 if (canonical && stateKey(canonical) === stateKey(target)) {
   const retained = verifyRuntime(target); readiness(target, closureMigration === 'true');
   applyConfiguration(target); projections(target); fs.rmSync(pendingFile, { force: true });
