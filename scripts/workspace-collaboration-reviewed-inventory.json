@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "crm-access": {
+      "migration": "20261005020000_workspace_collaboration",
+      "migrations": {
+        "20260920000000_init_aerocrm": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14",
+        "20260921020000_add_crm_custom_member_role": "2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514",
+        "20260921020100_crm_custom_roles": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876",
+        "20260921030100_crm_admin_seat_capacity": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d",
+        "20260923030000_workspace_closure": "bf58555641fe010e897ae2d4af2152fa4078c6a86a3fded7c502c1c5476c9cc6",
+        "20261005010000_crm_saved_views": "25eae1ded34a19affaa4a6286f38175c58dc50d214e842c1a5adf6321b885cb1",
+        "20261005020000_workspace_collaboration": "d3146d671018b306f321f259141eda26d9efed3676ded38c2f044cb35c112778"
+      },
+      "aclSha256": "555218ec532d243109a8ca873a75d73fed7a01e177e09f101218996201dc7474",
+      "tables": [
+        "_prisma_migrations",
+        "crm_admissions",
+        "crm_billing_capacity",
+        "crm_billing_operations",
+        "crm_chat_conversations",
+        "crm_chat_messages",
+        "crm_chat_participants",
+        "crm_custom_roles",
+        "crm_directory_entries",
+        "crm_employee_profiles",
+        "crm_invitation_intents",
+        "crm_member_teams",
+        "crm_saved_views",
+        "crm_team_audit",
+        "crm_team_command_receipts",
+        "crm_team_deliveries",
+        "crm_team_outbox",
+        "crm_teams",
+        "crm_workspace_access",
+        "crm_workspace_branding",
+        "crm_workspace_closures",
+        "crm_workspace_members",
+        "service_identity",
+        "workspace_closure_fences"
+      ],
+      "sequences": {
+        "crm_admissions_position_seq": [
+          "SELECT",
+          "USAGE"
+        ]
+      },
+      "types": [
+        "CrmAccessLifecycle",
+        "CrmMemberRole"
+      ],
+      "routines": [
+        "assert_workspace_open",
+        "enforce_service_identity_integrity",
+        "enforce_workspace_closure_fence",
+        "enforce_workspace_closure_operation",
+        "guard_billing_capacity",
+        "guard_billing_operation",
+        "guard_workspace_business",
+        "guard_workspace_intent",
+        "is_valid_custom_role_permissions",
+        "provision_workspace_collaboration",
+        "reject_team_history_mutation",
+        "signal_workspace_collaboration"
+      ],
+      "routineExecute": [
+        "assert_workspace_open(uuid)",
+        "is_valid_custom_role_permissions(text[])"
+      ]
+    },
+    "crm-customers": {
+      "migration": "20261005010000_mail_live_notifications",
+      "migrations": {
+        "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
+        "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c",
+        "20260928000000_corporate_mail": "0f21487e131384fef83494d962f474545523ee1a215c5ae1a5928f436919e05f",
+        "20260928010000_mail_reply_guard_alias": "3f613866d369e94ff20449dbd3a7ec468755cafcb7677f136dd3c7ff04aff8c4",
+        "20260928020000_mail_notifications": "ca04041709feb4ab1f9c612460d53efe2cc0dbf53d30e08cf36310a17ec3facc",
+        "20260929000000_mail_workspace": "464b7b587b3cbb14fa44f6d6f46539941fd1a48723e902b177ffc7647b6a013c",
+        "20261001000000_crm_file_imports": "f576f71658ed8355711810df235a0d267eb575fe86cd6c4009db8cd7a574c44f",
+        "20261005010000_mail_live_notifications": "77f9df9231f3793440c473bbcf084d69fa2cc61ebc8bb8634115a3ab5683eea1"
+      },
+      "aclSha256": "59ed85e9ee5875c95a82d59b6448e0e4ac0fcc18f38b738310a98d042232e605",
+      "tables": [
+        "_prisma_migrations",
+        "companies",
+        "contacts",
+        "customer_activities",
+        "customer_commands",
+        "export_audit",
+        "import_bindings",
+        "import_previews",
+        "intake_operation_commands",
+        "intake_operation_slots",
+        "mail_attachments",
+        "mail_audit",
+        "mail_commands",
+        "mail_connections",
+        "mail_contact_links",
+        "mail_folders",
+        "mail_jobs",
+        "mail_mailbox_grants",
+        "mail_mailboxes",
+        "mail_messages",
+        "mail_notification_reads",
+        "mail_notifications",
+        "mail_send_attachments",
+        "mail_send_intents",
+        "service_identity",
+        "workspace_closure_fences"
+      ],
+      "sequences": {},
+      "types": [],
+      "routines": [
+        "assert_workspace_open",
+        "enforce_service_identity_integrity",
+        "guard_workspace_business_write",
+        "import_binding_immutable",
+        "import_preview_immutable",
+        "mail_write_guard",
+        "notify_live_change",
+        "workspace_closure_fence_immutable"
+      ],
+      "routineExecute": [
+        "assert_workspace_open(uuid)"
+      ]
+    }
+  }
+}

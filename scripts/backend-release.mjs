@@ -28,25 +28,28 @@ args.shift();
 const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
   commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
   closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = '',
-  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = ''] = args;
+  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = ''] = args;
 assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
 assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
 assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
 assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
-assert(args.length >= 3 && args.length <= 23, 'Invalid backend release argument count');
+assert(args.length >= 3 && args.length <= 25, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
-  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash]];
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash]];
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
 }
 assert.equal(billing, custom, 'Billing and custom-role hooks must be paired');
 if (planner === 'true')
-  assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, ux].every(value => value === 'false'),
+  assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, ux, collaboration].every(value => value === 'false'),
     'CRM planner customization cannot combine migration hooks');
 if (ux === 'true')
-  assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner].every(value => value === 'false'),
+  assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, collaboration].every(value => value === 'false'),
     'CRM UX unification cannot combine migration hooks');
+if (collaboration === 'true')
+  assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux].every(value => value === 'false'),
+    'Workspace collaboration cannot combine migration hooks');
 if (fileImports === 'true')
   assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail].every(value => value === 'false'),
     'CRM file imports cannot combine migration hooks');
@@ -65,7 +68,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -75,7 +78,7 @@ assert(['true', 'false'].includes(mailEnvInstall), 'Invalid Customers env instal
 assert(mailEnvInstall === 'true' ? /^[a-f0-9]{64}$/.test(mailEnvBeforeHash) &&
   /^[a-f0-9]{64}$/.test(mailEnvBundleHash) : !mailEnvBeforeHash && !mailEnvBundleHash,
   'Invalid reviewed Customers env hashes');
-assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair, fileImports, planner, ux].every(value => value === 'false'),
+assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair, fileImports, planner, ux, collaboration].every(value => value === 'false'),
   'Customers env installation cannot combine unrelated migration hooks');
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
@@ -310,7 +313,8 @@ function runMigrations() {
     ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash], ['crm-corporate-mail-migration.mjs', mail, mailHash],
     ['crm-file-imports-migration.mjs', fileImports, fileImportsHash],
     ['crm-planner-customization-migration.mjs', planner, plannerHash],
-    ['crm-ux-unification-migration.mjs', ux, uxHash]];
+    ['crm-ux-unification-migration.mjs', ux, uxHash],
+    ['workspace-collaboration-migration.mjs', collaboration, collaborationHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,

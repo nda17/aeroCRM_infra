@@ -1,7 +1,7 @@
 name: Infrastructure CI
 on:
   push:
-    branches: ['dev_0.1.0/feature/standalone-crm', 'dev_0.2.0/feature/selective-backend-release', 'dev_0.3.0/feature/draft-protection-and-corporate-mail', 'dev_0.4.0/feature/crm-file-imports', 'dev_0.6.0/feature/crm-ux-unification', 'dev_0.6.1/fix/rabbitmq-cold-start', 'prod_0.1.0']
+    branches: ['dev_0.1.0/feature/standalone-crm', 'dev_0.2.0/feature/selective-backend-release', 'dev_0.3.0/feature/draft-protection-and-corporate-mail', 'dev_0.4.0/feature/crm-file-imports', 'dev_0.6.0/feature/crm-ux-unification', 'dev_0.6.1/fix/rabbitmq-cold-start', 'dev_0.7.0/feature/workspace-collaboration', 'prod_0.1.0']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -28,6 +28,7 @@ jobs:
           node --check scripts/backend-image-cleanup.mjs
           node --check scripts/crm-file-imports-migration.mjs
           node --check scripts/crm-ux-unification-migration.mjs
+          node --check scripts/workspace-collaboration-migration.mjs
           node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs scripts/backend-mail-env.test.mjs
           node --test scripts/backend-release-rabbitmq-config.test.mjs
           node --test scripts/backend-image-cleanup.test.mjs
@@ -36,6 +37,7 @@ jobs:
           node scripts/workspace-closure-enable.mjs --policy-self-test
           node scripts/crm-file-imports-migration.mjs --policy-self-test
           node scripts/crm-ux-unification-migration.mjs --policy-self-test
+          node scripts/workspace-collaboration-migration.mjs --policy-self-test
       - name: Match production Docker image store
         uses: docker/setup-docker-action@v5
         with:

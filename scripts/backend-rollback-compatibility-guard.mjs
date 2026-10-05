@@ -29,6 +29,7 @@ const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-r
 const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-reviewed-inventory.json', import.meta.url)));
 const importMigration = '20261001000000_crm_file_imports';
 const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-customization-reviewed-inventory.json', import.meta.url)));
+const collaborationInventory = JSON.parse(fs.readFileSync(new URL('./workspace-collaboration-reviewed-inventory.json', import.meta.url)));
 const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
 const mailWorkspaceMigration = '20260929000000_mail_workspace';
@@ -63,10 +64,10 @@ function imageCapabilities(image, migrations, expectedChecksums = {}, execute = 
 function closureImageReviewed(service, sha, execute = run) {
   const expected = closureInventory.owners[service];
   const accepted = service === 'crm-customers'
-    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers, importInventory.owners['crm-customers']]
+    ? [expected, mailInventory.legacyClosureCustomers, mailInventory.previousMailCustomers, mailInventory.previousNotificationsCustomers, mailInventory.previousWorkspaceCustomers, importInventory.owners['crm-customers'], collaborationInventory.owners['crm-customers']]
     : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales'], plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales']]
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
-        : service === 'crm-access' ? [expected, uxInventory.owners['crm-access']] : [expected];
+        : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -224,7 +225,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   const previous = mailInventory.previousMailCustomers;
   const previousNotifications = mailInventory.previousNotificationsCustomers;
   const previousWorkspace = mailInventory.previousWorkspaceCustomers;
-  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace, importInventory.owners['crm-customers']];
+  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace, importInventory.owners['crm-customers'], collaborationInventory.owners['crm-customers']];
   const reviewCustomers = (pair, crossAcl = false) => {
     let calls = 0;
     const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {

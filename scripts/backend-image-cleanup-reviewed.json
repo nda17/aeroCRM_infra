@@ -1,903 +1,104 @@
 {
   "schemaVersion": 1,
   "mode": "READ_ONLY",
-  "generatedAt": "2026-09-28T10:42:38.421Z",
-  "containerCount": 32,
+  "generatedAt": "2026-10-05T20:22:06.512Z",
+  "containerCount": 34,
   "candidates": [
     {
-      "imageId": "sha256:09ee7a25bf657f9a94714daf2c7efedb2794a33c9247f99f67d68de2b2359ebd",
+      "imageId": "sha256:014c695d4cc777b7827f30bf7e33eccdfc072494df8e306cf42932abe22c3f81",
       "tags": [
-        "aerocrm/api-gateway:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
+        "aerocrm/support:26e65ad03d535fb7446dcac72dec4251ec820715"
       ],
-      "sizeBytes": 283165382,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
+      "sizeBytes": 584221924,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
     },
     {
-      "imageId": "sha256:0d097fa18d9ac8845264f15c011768ce002465eee8cf483824e0156f16dcfecf",
+      "imageId": "sha256:04d75a86fe19b090be13c8330c47662b54e162268f0d7c3ed4df2369b1352c40",
       "tags": [
-        "aerocrm/crm-intake:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
+        "aerocrm/billing:26e65ad03d535fb7446dcac72dec4251ec820715"
       ],
-      "sizeBytes": 611364591,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
+      "sizeBytes": 499557377,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
     },
     {
-      "imageId": "sha256:10b6dc576bc01850d2d16051175ea4879914d8695a88748a3b64c740455afe88",
+      "imageId": "sha256:05466a32830dbabe793418da6010a6d8b4fe0a634cee7d6fa236dec08fa6cbbf",
       "tags": [
-        "aerocrm/operations:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
+        "aerocrm/api-gateway:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
       ],
-      "sizeBytes": 880249752,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
+      "sizeBytes": 193312228,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
     },
     {
-      "imageId": "sha256:1269d472845a131e91005789a201a7745f209db6897214ede047f97d1bfafb83",
+      "imageId": "sha256:05794334943d1b4278ff920ab31f07ce3fc6323fbbe48d162d51199437962e1f",
       "tags": [
-        "aerocrm/platform:633fbab74561be63173b8b66a7f91a8eef6a42ac"
+        "aerocrm/crm-intake:597473206ffa333a884811d00fc885d609dc8358"
       ],
-      "sizeBytes": 724097534,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
+      "sizeBytes": 421646814,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
     },
-    {
-      "imageId": "sha256:199bab16578d664ee6c0304233dd238ed3a85877acd1fd622b1b947b664ae2cc",
-      "tags": [
-        "aerocrm/identity:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 819489176,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:1be3ee021797f49cd3757f64bfdfa4c261c8fd36f18e9f18029172389e053d7a",
-      "tags": [
-        "aerocrm/crm-sales:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 614246124,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:1e517ac706ca895a1a60b989cce7fb625f79ec82816224e242cc64926f783239",
-      "tags": [
-        "aerocrm/operations:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 880248730,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:220c1ec60f840c1a805ec52e74f98be901e72a9cfa5536150c5fc2c8da4de68f",
-      "tags": [
-        "aerocrm/billing:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 722854435,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:222304e8a65f23dbfe167ca516131201c2c8b08ee3adad6fb788765253309fc5",
-      "tags": [
-        "aerocrm/api-gateway:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 283165382,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:22426bf09c6b1ebe65a6df6cddea15f6c7dc62c7e0e5281457ce3fe1b1935d1a",
-      "tags": [
-        "aerocrm/crm-intake:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 611123945,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:2406cba7695fca74f5ade6b054f8cd5468a47572a9c282a490f116b874edf4f6",
-      "tags": [
-        "aerocrm/operations:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 880243607,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:24a393010cbab753517d3b0b7c303115d02b8f9d8220eeea6632aeb21fd7ff82",
-      "tags": [
-        "aerocrm/api-gateway:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 283164870,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:2a9ce196a4effb74055839a7f130f69729cd45c035ed88ac5a8758df5b81c6de",
-      "tags": [
-        "aerocrm/platform:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 724097534,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:2c30444b53f5234253ac083f9b391d7b9e88f29643cd8f0904001d36d60bec5d",
-      "tags": [
-        "aerocrm/crm-intake:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 611124451,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:2d6cbc17b39242dbfd112152653f1a022c6d4ab21aebde02a9db25ee59775302",
-      "tags": [
-        "aerocrm/crm-intake:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 611124458,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:2ed987818f71b3f0311ee55bbe0bb491db09a2a4d038cd328450ceff7faef6eb",
-      "tags": [
-        "aerocrm/notification-delivery:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 668275289,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:3084d3a3d44bcdfdaa5939a96acd240e6ad536591540348509c57d087196088a",
-      "tags": [
-        "aerocrm/identity:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 819523991,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:31cbad11aeb972c86b8c9fe3d5a023b4be25cd258f59bc637a856f956f7cf79a",
-      "tags": [
-        "aerocrm/crm-sales:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 612462812,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:32275eb563f3e07a9f49b2bb579c37046878d192f1ea54ce4fe81444334dc10a",
-      "tags": [
-        "aerocrm/reporting:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 611280609,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:33e254f56e55b8ff0e1531fd4c5890840d6a06e58821344f76a742c5d1ddc12b",
-      "tags": [
-        "aerocrm/notification-delivery:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 668275288,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:345b4ccc48f886e02612775335ba63e84663154ef7f40d4f86d9440e7fd92327",
-      "tags": [
-        "aerocrm/billing:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 722296866,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:352593d3865ffa2291d69bc1ceeeb916a6d9b34891b000833780176de41282ed",
-      "tags": [
-        "aerocrm/api-gateway:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 283165382,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:3c6f004d6e1cfe0e5047e33b4332cfb6ac66938b9768e2e987cc3a3b3c78a87d",
-      "tags": [
-        "aerocrm/api-gateway:bbc46bc29f53d9add795ef56948c79a8fe904b02"
-      ],
-      "sizeBytes": 283165372,
-      "revision": "bbc46bc29f53d9add795ef56948c79a8fe904b02"
-    },
-    {
-      "imageId": "sha256:3dff651332b536f923b33a2b843159693e1469e4cb160c17c0c89c0fadb151c4",
-      "tags": [
-        "aerocrm/support:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 841534979,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:453c10f329ddf398e86a9261628ddd07a2ac6afaa4c97ce258df9de5b26edb09",
-      "tags": [
-        "aerocrm/crm-intake:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 611123951,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:4847bbc6a35ed0eaa0fed42e47940fc8c09e6f80c514d3acba09c49384d6c283",
-      "tags": [
-        "aerocrm/platform:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 724097524,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:4870c6be939323f3ecf138f49d36eeb40a5a0b960f2d706f3c17e0740af5aee1",
-      "tags": [
-        "aerocrm/crm-customers:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 606683893,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:487d3644397292fa0c4de46540761e22aa806704b893fb34341eb5be82bc8d4c",
-      "tags": [
-        "aerocrm/api-gateway:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 283165376,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:48da0c04727c099260593f2e466698615a139340757c8f4039b5125da7c27260",
-      "tags": [
-        "aerocrm/campaigns:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 607724761,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:4d27d7d737c013be85b0528f2d5b3972e87aad4aaa5bd55dc42b545734088be5",
-      "tags": [
-        "aerocrm/support:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 841534984,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:4d35b9edbb2a136f37ccf7a90c4b8d4ab94bf73c69efbcb2e878460a2b000ebf",
-      "tags": [
-        "aerocrm/identity:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 819519895,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:4ee1a64fe7ca3db373bb6b2c5e8b933ced3bfc68b222e44d0664a0f7d4c0aced",
-      "tags": [
-        "aerocrm/campaigns:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 607724769,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:53d87142534f46b21db4c0db80193c3898535d1ed2ddebcecc65198a5cfc5210",
-      "tags": [
-        "aerocrm/crm-access:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 717301153,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:5af7f8f4023bbd1ab80bb54dfde8aaf45b123da21158b3bc9d01cffb1ea8dde2",
-      "tags": [
-        "aerocrm/crm-intake:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 611364586,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:5c757107ae69dc91177f0bbdd22a2d5c5caad376ae2284c8dba903dc186ddc2b",
-      "tags": [
-        "aerocrm/campaigns:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 607724770,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:5f8c897b7660e3c2291e1656f6a18099115dfa5902719a873c91424dfff8d2ce",
-      "tags": [
-        "aerocrm/crm-customers:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 606493429,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:607ea0d29d398222cfee6f1644915932e1a4bef084eda8e512a463efce5e3b12",
-      "tags": [
-        "aerocrm/notification-delivery:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 668252760,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:62ef6b07db80cd016b1781e35642a8dc76ed80f4d2bcb2b89e633dfdbdce4259",
-      "tags": [
-        "aerocrm/campaigns:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 607724770,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:675b0fea5f7042cb64ff0d9721dd1bae5d1108baa3f7e53e025c79ac989f32f8",
-      "tags": [
-        "aerocrm/crm-sales:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 614246126,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:6da2db079976d20aac50ca706430050c1c483a918d1afd4405deb87ac0b8848e",
-      "tags": [
-        "aerocrm/crm-sales:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 612462828,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:6f692526df5a4479a69861e0d2be6305971215110d7ba89cdfea7975c06f0b1a",
-      "tags": [
-        "aerocrm/platform:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 724097533,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:6fff0eae95f0d25795235dc28f1b9592a234c42c16813eb89e8090a28636aa78",
-      "tags": [
-        "aerocrm/crm-access:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 717301153,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:7383dcf6e92594dd95c6df672ee600659570f9a366b848f064e35ac5d8160772",
-      "tags": [
-        "aerocrm/operations:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 880248218,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:76432a74eb7c456ccac8d2dc17ca248889baf057943a156bbbfb2206d2541f68",
-      "tags": [
-        "aerocrm/crm-sales:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 612462827,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:786f6f5ef7c3616cffd5b72448ce7c044bbe926818ed93658281b8a9c112986c",
-      "tags": [
-        "aerocrm/crm-access:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 717788577,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:7a6e16ca7a12b74edbe2cc4a8cf73d2bfe019e6b945da15475890222a9f16ddd",
-      "tags": [
-        "aerocrm/support:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 841534984,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:7b07b1e8001335cd22d2ea864f986050435512a43721d068cb204cac01f4dd89",
-      "tags": [
-        "aerocrm/billing:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 722306594,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:7b7f65e6862a57626bd0c509b49c7232b76190f6dcc3cc0200a55fa8f914e833",
-      "tags": [
-        "aerocrm/identity:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 819705239,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:7c37ffb40521a4e69fcb5e7be8165894daa046baa8096bb55734e2f505d4bd47",
-      "tags": [
-        "aerocrm/billing:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 722653219,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:7c58716fd0df341e524cb1133aa53fb0066917e5958e5b6a2e16ea5e01e923cb",
-      "tags": [
-        "aerocrm/crm-sales:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 614059756,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:80a774c1d526e7d8ec8c535e3346b2f118535ab7ce8fc6f6e8ddf39f56b7d63f",
-      "tags": [
-        "aerocrm/support:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 841534983,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:81c9c907a8c77acf7f5f116cfe2f5475dd6452184b3d1ae5d6aca99dfe7568e9",
-      "tags": [
-        "aerocrm/reporting:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 611280609,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:8299757015c2cf45245c956156fe58a87fa2699843f43752ab2c7c59ce892abf",
-      "tags": [
-        "aerocrm/crm-access:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 717788577,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:865d9b913e77cafcb7b1df50aa0556477583e289955d3ce914bea6c48990f718",
-      "tags": [
-        "aerocrm/support:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 841534985,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:876d87a57a79ffbe005409d4f955a189f79e80595013cfe3ecf0d52c730a8049",
-      "tags": [
-        "aerocrm/crm-intake:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 611123937,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:87c8b46cf5355c2f4e299235b9fe29ef54905026eef7abe28b3dce38008e7896",
-      "tags": [
-        "aerocrm/reporting:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 611280610,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:8a9723cb0f652b20c91a3dff9b73d22a5cffdd6a00c42967ce543154c0006f4a",
-      "tags": [
-        "aerocrm/reporting:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 611280608,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:9515dd49b625c4b4962e0778239440cf263b8f5f027be6ef6cbb2594b6cd6e90",
-      "tags": [
-        "aerocrm/notification-delivery:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 668275288,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:95a5ed916eed9eef82d7e4c26fccdcd32f2df8915ac0fb624248a29f7adfc9a8",
-      "tags": [
-        "aerocrm/crm-access:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 717301153,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:95edc3c37fb386235e3cd33c1ac08fb60fa420980ba7dc42571060dc6d19e334",
-      "tags": [
-        "aerocrm/platform:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 724097532,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:9605954d368eeb9cca27e7192cdf3b2f8169116f8577a26c72074f0769b8c134",
-      "tags": [
-        "aerocrm/crm-access:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 718348705,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:9dfed298248ab7c1b5660b43bf2297034bd35bc09c077b7db30875e89a7cd61f",
-      "tags": [
-        "aerocrm/campaigns:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 607724770,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:9f8737146bd4111c3dbb59aaba517112a091cecb1a5fb13aabe82cc2bcf82ca6",
-      "tags": [
-        "aerocrm/crm-customers:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 606493428,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:9ff42ff6dd5c829c6c9412adcd854b71b50e6c094f62da6deb79ad852f757bf6",
-      "tags": [
-        "aerocrm/identity:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 819518872,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:a145eea8b0fc7b9636722591888ff2bfa5f9020ec91227da6cf8d04279a81216",
-      "tags": [
-        "aerocrm/operations:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 880248730,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:a474ecb87939b65ac7f62cb9fa99fae8bab7c78d33edcefbb64c4474c277b8f7",
-      "tags": [
-        "aerocrm/crm-sales:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 614059758,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:a680f1a9b8ac9cb0eff736b8b0d614764e68e369064be160b2f762be5ec83f4d",
-      "tags": [
-        "aerocrm/identity:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 819705240,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:a88b5c31ea6ea7d8acc7a83fde4d2eb402b4d646e1cf21028f80106e2044532a",
-      "tags": [
-        "aerocrm/crm-customers:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 606493429,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:a93268b68cf02ce66edce2d12869824c2db56d7120f526f261592285211d77cc",
-      "tags": [
-        "aerocrm/operations:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 880393111,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:ac831db33bd18138dfde957bb44fc3fd328f1866f70d1356d8d2a0463b39f62d",
-      "tags": [
-        "aerocrm/reporting:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 611280610,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:ae868f39e084a36a06ee48289d7b4db538a58744d57201ba2a2039da9a54d9b3",
-      "tags": [
-        "aerocrm/support:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 841534985,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:b03d98cdce890f625b29ec7bc61cf7ea567fff35b06a4773677c9d597d48a4da",
-      "tags": [
-        "aerocrm/billing:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 722653220,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:b0a31527ca7336351133676e8273933ff6fc734cf86a846f6d532807fa63037a",
-      "tags": [
-        "aerocrm/reporting:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 611280609,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:b36def4779f7e3d62d373debebed2079134a0668e3e690713bad594b3c6b5694",
-      "tags": [
-        "aerocrm/crm-intake:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 611134191,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:bb525b93670061cf59a962b6989c239701793a95c0d7fdb04ce463e71c4f706d",
-      "tags": [
-        "aerocrm/api-gateway:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 283165382,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:c1229e32ee2e8664431117fa9ab47698bd15519d5b5d002f171ea5eeaa99aab6",
-      "tags": [
-        "aerocrm/campaigns:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 607724769,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:c18cd38d346d27a7a480d65252364c9cee79da3d7a8fc3f4b5432c9493e0620d",
-      "tags": [
-        "aerocrm/identity:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 819519891,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:c1a4fe61033d0e1c91113ce33d492d5e115a258e20a31e04b3b8c7acab87094b",
-      "tags": [
-        "aerocrm/crm-customers:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 606493428,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:c2a0bb3909fa34253325f338d5aebf89e7fed1de6410249e256b105db46da014",
-      "tags": [
-        "aerocrm/notification-delivery:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 668475476,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:c3cc13029fc5572ddcde5890e0bb43058eafc83190cc6d717304b6f90647f652",
-      "tags": [
-        "aerocrm/platform:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 724097534,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:c4b0ba15eaed5ecdc4f70858aceb1208baf2286d53b1fced2ff3379de7b61188",
-      "tags": [
-        "aerocrm/crm-customers:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 606493429,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:c6a9ddc5ff4e23da3eb67d16496b3ecd5a7f45960383cc497101033029f416be",
-      "tags": [
-        "aerocrm/identity:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 819518872,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:c7222f73b7251a38cc34f400154791a3743b74680b8d55a916a5ba1aff1f8459",
-      "tags": [
-        "aerocrm/crm-access:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 718348706,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:ca146921942241cc3ea642d1ffd28fb5c2e91570c6a883c955a01d216a35d259",
-      "tags": [
-        "aerocrm/billing:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 722296867,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:ca63386fdea83e31c7dc4bbef36fa882bcff190df200fc8c95709f72128b1874",
-      "tags": [
-        "aerocrm/operations:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 880249747,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:cb03f57b4b420c278628dab507f9d0bc8a1381d02e9411d29275a1f73285d838",
-      "tags": [
-        "aerocrm/notification-delivery:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 668275288,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:cd14caf3a99011d008dc0428b8cf133a214bb9256c7d2560e61ab146a4ee98b7",
-      "tags": [
-        "aerocrm/api-gateway:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 283165382,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:ceda064afc5356cc79731ebcdbe8e5a2cde503a792811a4986bd6dafff1c8a0f",
-      "tags": [
-        "aerocrm/support:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 841534985,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:cf90ed9b9e79fb8a8fdabfa6e884bb09bb292b1f23c10563f2da8509208bf84c",
-      "tags": [
-        "aerocrm/platform:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 724097534,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:cfe5150900f188fe497b48011c6fd677b764d9840567e14aba1d4ba97f991bbe",
-      "tags": [
-        "aerocrm/campaigns:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 607724769,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:d1111a1b8df3e4333de6abcd4d91a1edc5757dc1fdc03d6c0215a2c2b5e5e57d",
-      "tags": [
-        "aerocrm/crm-access:511ac82c5464330830b271aecd14ad87155f23be"
-      ],
-      "sizeBytes": 717788576,
-      "revision": "511ac82c5464330830b271aecd14ad87155f23be"
-    },
-    {
-      "imageId": "sha256:d1c61bc43b1ae98b5be5211280d20f953f006b136846c96268673f47a4ee19dc",
-      "tags": [
-        "aerocrm/notification-delivery:a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-      ],
-      "sizeBytes": 668275283,
-      "revision": "a6689d3658dccf5f0752cdc6194b06e60cadc82a"
-    },
-    {
-      "imageId": "sha256:d486e93f4e340dfd659e51eeb94af824b3ec2e2714e7126d9be4ca3b0814f966",
-      "tags": [
-        "aerocrm/crm-sales:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 612462828,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:d4d6a78c2ba06edeb18ba8d70e9963bc02034863e0009898a090140bc6147c58",
-      "tags": [
-        "aerocrm/reporting:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 611280610,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:d4eb84beef5123077f32ab9b6daf6db2dad205b8971a6783637545fa3a83dccf",
-      "tags": [
-        "aerocrm/platform:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 724097534,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:d7b5e16e55cc2dabf2c3b375ff59b366498f4772272acd87c546cba1a47e8a62",
-      "tags": [
-        "aerocrm/billing:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 722653220,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:d9f029a4956726c5aca5273bbc251fff1aadbe078d495b7c34df9ff2ffccb902",
-      "tags": [
-        "aerocrm/notification-delivery:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 668475481,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:dbcd1435113cd5512efc7cb2efb15e437fe4953d1668bd8ef2b49387892abb51",
-      "tags": [
-        "aerocrm/support:90014cf4d324778fc6627502e80cf20c3c69dd89"
-      ],
-      "sizeBytes": 841534974,
-      "revision": "90014cf4d324778fc6627502e80cf20c3c69dd89"
-    },
-    {
-      "imageId": "sha256:dce433ba14ecffbecd2c3006b0738fed07b2c43a49e31c4f664fc4afb52941ec",
-      "tags": [
-        "aerocrm/billing:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 722854435,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:e40caa7f32e921821c9dd743c0fba1632427036750d00e4c4e869effebcb4efa",
-      "tags": [
-        "aerocrm/operations:633fbab74561be63173b8b66a7f91a8eef6a42ac"
-      ],
-      "sizeBytes": 880243605,
-      "revision": "633fbab74561be63173b8b66a7f91a8eef6a42ac"
-    },
-    {
-      "imageId": "sha256:ecb76611385b3a8eeed5e0c60402d7cb2b93c43e658280c5b42ffc2d8fff6ec8",
-      "tags": [
-        "aerocrm/campaigns:cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-      ],
-      "sizeBytes": 607724761,
-      "revision": "cc5cf00a84ff1903c13ca5655d9ed09a0a363adf"
-    },
-    {
-      "imageId": "sha256:ef03d7c589cb96abbe2b03f31de2b4c293cf9aa1fbcbf44fc8b9ca8128bd5f24",
-      "tags": [
-        "aerocrm/reporting:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 611280609,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    },
-    {
-      "imageId": "sha256:f4ad6bf3bccdf439eabc40d8f9d346f877c21daf2031c19a04998c89aea2eecf",
-      "tags": [
-        "aerocrm/crm-customers:a937295587a6a57b68156093e1ce0bc370b34e8c"
-      ],
-      "sizeBytes": 606683892,
-      "revision": "a937295587a6a57b68156093e1ce0bc370b34e8c"
-    },
-    {
-      "imageId": "sha256:f4be22e0df0b4cff3277e0010b3fdb5b9f38c0388522256066a08f5d1a2e4128",
-      "tags": [
-        "aerocrm/crm-customers:350808a407bd3e278383d64436e715c934215862"
-      ],
-      "sizeBytes": 606493415,
-      "revision": "350808a407bd3e278383d64436e715c934215862"
-    },
-    {
-      "imageId": "sha256:f9833576d446c985d7d6f6eae4efae3e2aa159c5a51c695ee63b8d6d967de2a2",
-      "tags": [
-        "aerocrm/api-gateway:ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-      ],
-      "sizeBytes": 283165382,
-      "revision": "ad82619a8d12b0b4b9e3f165b760f93a767a94c8"
-    }
-  ],
-  "retained": [
     {
       "imageId": "sha256:0d2b2d996a69d1ad15eda101cbad7a4ad8a9d0a0193981a2a25681c7f4b78483",
       "tags": [
         "aerocrm/crm-sales:5d4554210832ceab243492070843857655678e62"
       ],
       "sizeBytes": 423304048,
-      "revision": "5d4554210832ceab243492070843857655678e62",
-      "reasons": [
-        "canonical",
-        "container-reference",
-        "marker:backend.sha",
-        "marker:workspace-closure-enabled.sha"
-      ]
+      "revision": "5d4554210832ceab243492070843857655678e62"
     },
     {
-      "imageId": "sha256:d21e48a8c477388103376e505a0618d1585aea97786dfaf7f75d4de2ac0de684",
+      "imageId": "sha256:0dc5bcd087cb890e60dcaada9d5e3aadcf960394c621e0569c0fc82d630db18d",
       "tags": [
-        "aerocrm/billing:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/api-gateway:26e65ad03d535fb7446dcac72dec4251ec820715"
       ],
-      "sizeBytes": 499557597,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 193312223,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
     },
     {
-      "imageId": "sha256:e1f611ffd4241186ca25c53ab149c17e2e5d276fd224198818f8f7494f7d4ba2",
+      "imageId": "sha256:0dd4c845b183bf68cec2603a1536befc1cf4384e56f406d81ac647a104f850f5",
       "tags": [
-        "aerocrm/crm-customers:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/campaigns:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
       ],
-      "sizeBytes": 418751719,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 419304502,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
     },
     {
-      "imageId": "sha256:788f2647dac05b8b048b1a1b8b52aed335a0942dd2162215fed2175553389e9f",
+      "imageId": "sha256:18182f88de82ed7c7d3b4d721923aaefc2d359f1dc4113cb050167b795715af8",
       "tags": [
-        "aerocrm/identity:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/crm-intake:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
       ],
-      "sizeBytes": 563729852,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 421674339,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:1dca5ac64a487871e63c642c95080013315933d857393c34941b5fe79e63cb64",
+      "tags": [
+        "aerocrm/identity:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 563729797,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:22fd984d345a47c5357bf3396284364ff16d9daa8c132df3be94171a35112d87",
+      "tags": [
+        "aerocrm/notification-delivery:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 458636457,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:249e491a1087d27dd5498b7233f7f96369fc44927c62e686860bbe00fc2ece50",
+      "tags": [
+        "aerocrm/identity:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 563730037,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:250fc556c9ea23ee2753c589f0cbacecdf8948a97f8d48a32b9fee928a3938ea",
+      "tags": [
+        "aerocrm/identity:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 564960813,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
     },
     {
       "imageId": "sha256:280d5da9d2c71d928753563650e22f63ac30df84d880792f0bebfcd9611eecaf",
@@ -905,12 +106,15 @@
         "aerocrm/campaigns:b6658486edcf56c29b7a4b4ba0353fa63760416a"
       ],
       "sizeBytes": 419304687,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:2873567741204fabdef3a371c91d891cc1a39ea9b9a36123774566c9836417f7",
+      "tags": [
+        "aerocrm/crm-sales:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 423652863,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
     },
     {
       "imageId": "sha256:28d0f8200d8e3847373013c2ccc30d095b3bfb2c73d0b8ec11bb88e84e4d26e9",
@@ -918,75 +122,47 @@
         "aerocrm/reporting:b6658486edcf56c29b7a4b4ba0353fa63760416a"
       ],
       "sizeBytes": 421866978,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
     },
     {
-      "imageId": "sha256:f8d7512d2c78479584c440304168bc56a9666f79ebd1b455fe092657c0748914",
+      "imageId": "sha256:2b29d07c11b5f31df5e85f49c75ddfcf03c6472e8a9546e93e653ecc874f9878",
       "tags": [
-        "aerocrm/notification-delivery:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/support:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
       ],
-      "sizeBytes": 458636534,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 584221255,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
     },
     {
-      "imageId": "sha256:aa81989e91a8a744f9dfb8508e1049c18efec80d0618d04dfda979f205c48860",
+      "imageId": "sha256:2d2c685e1822c160a2887f9879721d3c8b5a34ed4c41478c1fffe13aa314228c",
       "tags": [
-        "aerocrm/crm-sales:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/crm-customers:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
       ],
-      "sizeBytes": 423303701,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "verified-previous"
-      ]
+      "sizeBytes": 523838023,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
     },
     {
-      "imageId": "sha256:784bcc8359042aebe93f4b30bff707ce3864281619519519ef901d95e7f03762",
+      "imageId": "sha256:3214841c7afbbd01aa14fcc75041a25a007366aab1cd7a0b4b2d0940aecc3cd4",
       "tags": [
-        "aerocrm/crm-intake:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/operations:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
       ],
-      "sizeBytes": 421647197,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 603085992,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
     },
     {
-      "imageId": "sha256:d117d80f32720b09a689d199b5e2d204b6829e17efda106b1c40c8b4f12ce513",
+      "imageId": "sha256:352709d5a588c0b1b12b37df30c7fbd94ca0db823e1ea974e954f03e7214db03",
       "tags": [
-        "aerocrm/operations:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/operations:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
       ],
-      "sizeBytes": 603085264,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 603085956,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
     },
     {
-      "imageId": "sha256:6a6888ad39cb04dfa3fc47a1aa1b52e145b6200f8cd38b411771a40918653b93",
+      "imageId": "sha256:360ecd3dcf2b3a2e410f6fefa908e5aeb164767f44906313b6d80f061500d64a",
       "tags": [
-        "aerocrm/support:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/crm-intake:d01df4ffd169a5c203b067986585d8ce454b6272"
       ],
-      "sizeBytes": 584221321,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 421647831,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
     },
     {
       "imageId": "sha256:3776d7b2b21551f9715d6ba2f7c38be4c077d3d472f1a8a7867f90229a597d43",
@@ -994,25 +170,455 @@
         "aerocrm/platform:b6658486edcf56c29b7a4b4ba0353fa63760416a"
       ],
       "sizeBytes": 501066864,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
     },
     {
-      "imageId": "sha256:c9f93f5195c25c85ad9b7b06f4770da7639878ad7b0abdca31f4f635b3c4aae7",
+      "imageId": "sha256:3a8bf3bea96a4b24630f426ba3a65436e8002e81344876454a5ec5ac4be61a2c",
       "tags": [
-        "aerocrm/crm-access:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+        "aerocrm/reporting:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
       ],
-      "sizeBytes": 496730647,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
-      "reasons": [
-        "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
+      "sizeBytes": 421867334,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:3fbc72f6c2643c0837e8dd4a41699f6b1290ce415e0776c3dc4640c47c080503",
+      "tags": [
+        "aerocrm/campaigns:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 419317750,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:42f25e5663ba16a7ea8bc0812708ea03a589b15a59c69b9a4b9217621978031d",
+      "tags": [
+        "aerocrm/support:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 584222039,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:463c8b10774feb3ebacf9b86ba935a387676116e0112fb4e46e964f11daace9b",
+      "tags": [
+        "aerocrm/crm-access:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 496748899,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:46c1a820a6a437765e55d9af8c6061a0afc7ec227338041888aa2e8146f2adb2",
+      "tags": [
+        "aerocrm/api-gateway:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 193312222,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:46e5f1a3debe624fc7177d4e24899394581e0f3d6a735ba2c8d7da3ec8a28420",
+      "tags": [
+        "aerocrm/billing:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 499556692,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:47494b915f2b95bb7a3a6bdfacdc8721dfc48625a362ad9c7b330a137207b5e6",
+      "tags": [
+        "aerocrm/api-gateway:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 193312229,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:4ec8f897575550ec89ab65efdc54e2e16c7adae9cb10490f7ad8b849e55f2ee1",
+      "tags": [
+        "aerocrm/crm-customers:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 528352422,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:4fc6b06efd79b83502702144f4ced56ce1d2969850d4edcffe51dbd36e0d77b4",
+      "tags": [
+        "aerocrm/notification-delivery:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 458636691,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:505eff76f0d0bce521c05d20dad0dde461e05901838a1e6015828e39dd3e9d99",
+      "tags": [
+        "aerocrm/crm-access:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 496748999,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:526b985a510bec32a2a879441de01884c2085b5a0c7fa59f4ac5316d279a835f",
+      "tags": [
+        "aerocrm/crm-sales:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 423303890,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:5ae9dde490ca058fa2c38f687a38c891b4b544929585fb66350fb84b4eb5fb0a",
+      "tags": [
+        "aerocrm/billing:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 499557364,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:5d967d232408db3197763ba47f646b5da4973024b8d33e99599e594d3a5a99d4",
+      "tags": [
+        "aerocrm/operations:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 603085817,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:5e075d165ae65c98ec93bf613d92ddc324228a78729419365ecf140a409cd74b",
+      "tags": [
+        "aerocrm/billing:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 499557194,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:5e4f21529f8cf0d930822522c797f3f253fc731d47e37cf28acfadb792767318",
+      "tags": [
+        "aerocrm/notification-delivery:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 458648974,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:631cab173579004d3c33d5922724f27de6346f40e28d3fd1cc87e2c33c5b0e94",
+      "tags": [
+        "aerocrm/reporting:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 421880990,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:646e013b2d80ddbbce8c0a0cc06cd4b1d3a14d9e7a6b8fcc3e970dbfc7888560",
+      "tags": [
+        "aerocrm/crm-access:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 496748405,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:649a36b8851c1b70291e9a511fd1119df6899c1fc63e53ff400567fd5fb5e71b",
+      "tags": [
+        "aerocrm/crm-intake:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 421674466,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:6511a6edbd3cf15471e86a4c4621aaf5919392d6fa8548caedc6b9da547310f1",
+      "tags": [
+        "aerocrm/notification-delivery:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 458636615,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:6a6888ad39cb04dfa3fc47a1aa1b52e145b6200f8cd38b411771a40918653b93",
+      "tags": [
+        "aerocrm/support:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 584221321,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:6c80cad37dc3b283d8945a9514a6deeda6ae6a39b7105cc63b0f6eaac2173a5f",
+      "tags": [
+        "aerocrm/support:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 584222101,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:6da9c720aa39c94bebaf79d2478f6231ff1f7dc38a6832b8cc7e604d784aee43",
+      "tags": [
+        "aerocrm/crm-customers:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 523821116,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:6ec35423b18308a0148608bb8d1e3c958433608fea11674d493d271bd146d18f",
+      "tags": [
+        "aerocrm/operations:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 603089626,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:70888b9011bfe74b8c24df9e2dc3dfe26821b0c560d036fa223fd041cae04452",
+      "tags": [
+        "aerocrm/crm-customers:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 524038722,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:70bad81466b91f91102a38f7e1980fb109394c7af5a8d0b63f6554ec0b9ab5ac",
+      "tags": [
+        "aerocrm/crm-intake:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 421673681,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:766a1738e7f41001d120fa97080992d9ddf521f1a4ff060b64ba123271f7dfed",
+      "tags": [
+        "aerocrm/support:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 584221257,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:784bcc8359042aebe93f4b30bff707ce3864281619519519ef901d95e7f03762",
+      "tags": [
+        "aerocrm/crm-intake:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 421647197,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:786b3f1103eb6376a947573aaf0f0cc7a82901647738488e74ed6bb3fab9190d",
+      "tags": [
+        "aerocrm/crm-sales:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 423304668,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:788f2647dac05b8b048b1a1b8b52aed335a0942dd2162215fed2175553389e9f",
+      "tags": [
+        "aerocrm/identity:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 563729852,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:7adfd3bf623156ec02f83af8ae63846e0beb686cd4893aa8b1501ad7a5dff055",
+      "tags": [
+        "aerocrm/crm-intake:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 421646860,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:7b0d1fbd6fa5308090bd5c703a53eb08733aceaa93a35a8c343659c412d3b1f0",
+      "tags": [
+        "aerocrm/platform:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 501066616,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:7c241282fe0c9e7bf23dcffefc15c7d5132144c7f4960244d14f2adb32762046",
+      "tags": [
+        "aerocrm/notification-delivery:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 458636360,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:817bfdc49e1c3ee7613810a55ae7c6fb03d32f0cfc59c919279ce9b480c00b02",
+      "tags": [
+        "aerocrm/operations:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 603086068,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:82f9ed6da3ca4c3e0c43f3a0f3539a4eb843a787cd38494126f4eb7f8dc62fa2",
+      "tags": [
+        "aerocrm/campaigns:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 419317899,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:85ab832a87472f396c90130f8c6f9ed7d1689acb65a05635552eb443e6d2dd8b",
+      "tags": [
+        "aerocrm/operations:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 603085178,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:87c10292cd4e7653cc2ed5db50bf6c1a6dde5ce972c0a2d889ee05d3806d05f7",
+      "tags": [
+        "aerocrm/billing:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 499556548,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:87dc91eb58d6e3eb2349c7dee8a8a1126e72165aec492e2d3e7b257e2388c498",
+      "tags": [
+        "aerocrm/identity:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 563729801,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:88495ac295470dcd4eed3d2f716c3ade7318d7b2a2c4b59f1cb4ab60159856a3",
+      "tags": [
+        "aerocrm/campaigns:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 419304640,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:88bfd4fa166585f128b3f791bb799adc07c038a25d99e2a559fd529adb67435f",
+      "tags": [
+        "aerocrm/notification-delivery:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 458636032,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:897213605bc9c01ee5cb3d42e4ba00b82b55372e790c7a57d667d4578c54997b",
+      "tags": [
+        "aerocrm/reporting:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 421867517,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:8b359bc2ea33305858bab2591dece1b15e72d6e6c37c652b5230051d4ed6ccd9",
+      "tags": [
+        "aerocrm/support:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 584221922,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:8dae448f687945feebd3cb0f79be9c4f81e67e467299a494bd646ea9b5d6ae6f",
+      "tags": [
+        "aerocrm/platform:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 501067414,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:93756e07a858968944264763fb7f7526d50dd58b6cf59dcb2fb7d55ea31a3358",
+      "tags": [
+        "aerocrm/crm-access:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 496748480,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:958867be09d27c1db3465621707b1e209c8da279e50a1a54bc720a2507df69aa",
+      "tags": [
+        "aerocrm/crm-customers:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 528352841,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:9d73c781ee09ba8983c5436ebdaaf7aeab17bac18472774be3f2433828c49c33",
+      "tags": [
+        "aerocrm/crm-sales:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 423958995,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:a028229badd902167dbabc577bc3968451a557218d35fc7d43213fd776996241",
+      "tags": [
+        "aerocrm/crm-intake:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 421647127,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:a206c70581002463a491634e7ed98f0a8fcf9c1bc46afbacd29735f1ee494888",
+      "tags": [
+        "aerocrm/crm-sales:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 423303916,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:a385614e9a51e3c0f3642cb13b3fb10ae0ef3fd321866869e4ceca3e57e6f609",
+      "tags": [
+        "aerocrm/crm-access:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 496748665,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:a92ba585e700523733bad106c99e3e7eb1977bc61e98f490a17d449007d1826a",
+      "tags": [
+        "aerocrm/notification-delivery:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 458649627,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:aa81989e91a8a744f9dfb8508e1049c18efec80d0618d04dfda979f205c48860",
+      "tags": [
+        "aerocrm/crm-sales:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 423303701,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:aac031166861a22b8e45065d36abb8247fe1d0961f4b5e0505a194cba80be3a3",
+      "tags": [
+        "aerocrm/crm-sales:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 423304029,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:ac27cb8755bc8321566e4d29cbb91f691d7bdd2782ed310177f15a42bd7262fe",
+      "tags": [
+        "aerocrm/platform:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 501066847,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:b7c5eaacb403b90190ef292a1203bb283db98feaa72246abfe3fe4eaae86b03e",
+      "tags": [
+        "aerocrm/billing:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 499557250,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:b87180a8984491e650f68d4250221d8c10c919aab749488851f265159870da78",
+      "tags": [
+        "aerocrm/support:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 584221635,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:b8d399b3753ae5564903bf342d01ed6e0a1f284123ce41ed508af3b2324a67bd",
+      "tags": [
+        "aerocrm/reporting:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 421867366,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:b9f5c1f11db8f7434a23b3afc4165c2c9e8cd1c76be5560da5d60f7eaffe86e9",
+      "tags": [
+        "aerocrm/notification-delivery:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 458649388,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
     },
     {
       "imageId": "sha256:ba2e6d96108786b3a29ac5a5fc3d70c9521d594dca08d5796b71f24064262ed9",
@@ -1020,63 +626,353 @@
         "aerocrm/api-gateway:b6658486edcf56c29b7a4b4ba0353fa63760416a"
       ],
       "sizeBytes": 193312231,
-      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a",
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:ba831cd5bcbf446f301a4f4836603b3bf891db01794431293a66eb14c5e6c248",
+      "tags": [
+        "aerocrm/reporting:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 421867206,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:bdbc1b75a666bbe2d6fbde36168efcecf7b7b920b0b6a97398876e9f90ddc87e",
+      "tags": [
+        "aerocrm/crm-customers:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 528352354,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    },
+    {
+      "imageId": "sha256:be5461cf8cd8ae11361b9194fec96ee6b1daee3bfb6e6ba5e0a444baca3fb195",
+      "tags": [
+        "aerocrm/support:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 584221997,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:bf3d724395830d47fb170f3852595e23caa561a9f5fdfcd916af7ec93fa19283",
+      "tags": [
+        "aerocrm/crm-access:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 496748958,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:bfc8daf7adabc5e7d43bfddbdfc6a4537b882c420e111ffafe9ce244333b82a0",
+      "tags": [
+        "aerocrm/reporting:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 421880917,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:c013e71e733d8e5f6420ab78980f6da65e63d5239aecfa381b03e0cda525794e",
+      "tags": [
+        "aerocrm/campaigns:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 419304687,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:c1ef8e0a2f3436df9406b9c3c69de7ef8e00904d488504c5a47798e6c0f2d942",
+      "tags": [
+        "aerocrm/platform:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 501066717,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:c446823153b2649d1989dc7e0c14d598b5b1d16278ee26d706150ec66a00deb0",
+      "tags": [
+        "aerocrm/crm-customers:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 527905705,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:c7fa46df55d85293f1f526b3ad8c0b165dc8dbe62ea24c53a3809900ba9a7f1d",
+      "tags": [
+        "aerocrm/crm-sales:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 423955116,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:c8e800cb3efefa35fa3ea731022bcda5921bf3ed3e302cd4e718ad1bd253bae6",
+      "tags": [
+        "aerocrm/campaigns:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 419304555,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:c9f93f5195c25c85ad9b7b06f4770da7639878ad7b0abdca31f4f635b3c4aae7",
+      "tags": [
+        "aerocrm/crm-access:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 496730647,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:ca4458306ad0fe90514771a80077339ffce07db8724a5b76984245e1d07173f9",
+      "tags": [
+        "aerocrm/platform:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 501067154,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:ca6b3e4992a9e429b4cd803533cf51fe1339af1e57bce536bb75a103b0e7c184",
+      "tags": [
+        "aerocrm/identity:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 563729587,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:cc50224c0dd598df2ab149f28a22e0cc1505cabb172bce3775d2172d3814a26d",
+      "tags": [
+        "aerocrm/reporting:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 421867152,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:cd9ee8a28339a71ffbf0bb268e3eb9f895470b0f717664e3d4731ad41a613c86",
+      "tags": [
+        "aerocrm/billing:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 499556990,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:ce1be270d22cbe1d9bf5f6ddcb2c42966ea7e82f35b509a2e4f9ab3cd74e728d",
+      "tags": [
+        "aerocrm/crm-access:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 496748526,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:d0d00e54f520fce52a910253b6ce91011ae29984ebb4e880ef798f80e9b9cc8f",
+      "tags": [
+        "aerocrm/api-gateway:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 193312226,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:d117d80f32720b09a689d199b5e2d204b6829e17efda106b1c40c8b4f12ce513",
+      "tags": [
+        "aerocrm/operations:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 603085264,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:d204dfca98e6dfdd9d378ac1ae635a3e3ab6ea592a0807e77e474dc32980b261",
+      "tags": [
+        "aerocrm/crm-access:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 496748726,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:d21e48a8c477388103376e505a0618d1585aea97786dfaf7f75d4de2ac0de684",
+      "tags": [
+        "aerocrm/billing:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 499557597,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:d2a2e9058eb45238243d769a0b5e874a7ffe630cb4ef3155de8bdda8b4f2eea9",
+      "tags": [
+        "aerocrm/api-gateway:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 193312227,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:d427d470d79695746a9ca952754beb7fc5d6650907c85fb22f439210821fb14e",
+      "tags": [
+        "aerocrm/api-gateway:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 193312228,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:d431fb6faec9d1419d3902cb9cfb24a3c5ba947081ca33c8e3fefaf21a1cb92a",
+      "tags": [
+        "aerocrm/crm-sales:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 423303821,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:d4b6d614fbc25be8cbfa7c62a3f8c8546210ade367ee7457eed3ec0076d15ae7",
+      "tags": [
+        "aerocrm/identity:1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+      ],
+      "sizeBytes": 564960645,
+      "revision": "1be129b5fe74cba3a7f30dbda59f43b7b320c0cc"
+    },
+    {
+      "imageId": "sha256:d6551f5ca37ea5a9c225ff26f8acfbb6a95314a75bf7f28f394efb49c8c5901e",
+      "tags": [
+        "aerocrm/identity:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 563728842,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:d75603f0f46e53f60f2de3ef55e3ea21cbb7abf750e04b593c5fa0b1cbaebdcd",
+      "tags": [
+        "aerocrm/platform:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 501066859,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:dc10d43a34c668b3966ad7f83841b1930b69abddb1f4b14028b71481bb37bc48",
+      "tags": [
+        "aerocrm/platform:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 501066927,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:df4ddb9e21eb3c6183d44b5fc1b013244630b3a5957d0de6f4fe641d092f447b",
+      "tags": [
+        "aerocrm/crm-intake:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 421647810,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:df95c8135afbe2cdde8f78f25192aaae8d634b019298a1cdce36ffd3db545f97",
+      "tags": [
+        "aerocrm/billing:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 499556462,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:e0a4966ca5b8de27518f101babc2ee86acabab80518f07e9e5bbf6cf171b7692",
+      "tags": [
+        "aerocrm/operations:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 603086720,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:e1f611ffd4241186ca25c53ab149c17e2e5d276fd224198818f8f7494f7d4ba2",
+      "tags": [
+        "aerocrm/crm-customers:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 418751719,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:e281bc6f99adbfee9356de6c5e834029c81af96ace3fbde0dadf4a791982817a",
+      "tags": [
+        "aerocrm/identity:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 563729236,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:e94f28c1a9b37c20cbfd49d8f156d65ec79bc9519dfa003aac1da0f535e31111",
+      "tags": [
+        "aerocrm/campaigns:d01df4ffd169a5c203b067986585d8ce454b6272"
+      ],
+      "sizeBytes": 419304400,
+      "revision": "d01df4ffd169a5c203b067986585d8ce454b6272"
+    },
+    {
+      "imageId": "sha256:eb900f3139ac2b4f1dcbaef47e902801be89599461091207a138363abebc8980",
+      "tags": [
+        "aerocrm/api-gateway:1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+      ],
+      "sizeBytes": 193312225,
+      "revision": "1ad4216c2f42d0d8c17201f7b6eda29f599afd9b"
+    },
+    {
+      "imageId": "sha256:f675c316f8b8e0816fad7fe62fc16fb5ef2f77ef106aa409c6fbffde3b8cfaf9",
+      "tags": [
+        "aerocrm/operations:597473206ffa333a884811d00fc885d609dc8358"
+      ],
+      "sizeBytes": 603086962,
+      "revision": "597473206ffa333a884811d00fc885d609dc8358"
+    },
+    {
+      "imageId": "sha256:f6d938a63578dbc9275da14b762f02645889559c1e35330c1c2e64763ae350e4",
+      "tags": [
+        "aerocrm/crm-customers:83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+      ],
+      "sizeBytes": 523820256,
+      "revision": "83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18"
+    },
+    {
+      "imageId": "sha256:f8d7512d2c78479584c440304168bc56a9666f79ebd1b455fe092657c0748914",
+      "tags": [
+        "aerocrm/notification-delivery:b6658486edcf56c29b7a4b4ba0353fa63760416a"
+      ],
+      "sizeBytes": 458636534,
+      "revision": "b6658486edcf56c29b7a4b4ba0353fa63760416a"
+    },
+    {
+      "imageId": "sha256:f9b4055f728c0fd1fad09a55f78c432e963842bef1a33842152a83ce404ac719",
+      "tags": [
+        "aerocrm/reporting:c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+      ],
+      "sizeBytes": 421880774,
+      "revision": "c5e8890008f5ba1b0d2d719c0970ce09bfd57c6d"
+    },
+    {
+      "imageId": "sha256:fa29113f80d9f0dc8cc36a1603bb10487de8d05823f1639ee8e4d59acc7cf9b0",
+      "tags": [
+        "aerocrm/platform:2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+      ],
+      "sizeBytes": 501067092,
+      "revision": "2aec1fa5ae97c8e7b6e98349c6f4b1b5f2c1375e"
+    },
+    {
+      "imageId": "sha256:fd717fcaa87fc07e668f84c0e04e1b024357444b8d65f6c2ceae0727075716fb",
+      "tags": [
+        "aerocrm/campaigns:26e65ad03d535fb7446dcac72dec4251ec820715"
+      ],
+      "sizeBytes": 419317784,
+      "revision": "26e65ad03d535fb7446dcac72dec4251ec820715"
+    }
+  ],
+  "retained": [
+    {
+      "imageId": "sha256:0359ec7baeefda29ef9c7ea03b8df2e093886b306bdd0cce38a1eaa397bc23f3",
+      "tags": [
+        "aerocrm/platform:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 501066848,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:074a15bc31d0c6c585118aefab28b061d77965621a497eb3d4aa3ab79fcb62a2",
+      "tags": [
+        "aerocrm/crm-access:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 496928700,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
       "reasons": [
         "canonical",
-        "verified-previous",
-        "container-reference"
-      ]
-    },
-    {
-      "imageId": "sha256:0ab277928f1ac8aff4450d5ac958894aebb85701e98a983235c0328c20208a0b",
-      "tags": [
-        "aerocrm/operations:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 880249754,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:8bbcccf5f45bc11e505ff275beb17f139ae4663cd67e457e36cb642c235d70ea",
-      "tags": [
-        "aerocrm/crm-access:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 718348699,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:7affc3a89d806d93eb4d06059c28d39880a3cbcea6f2a532cb5ce19b8230a262",
-      "tags": [
-        "aerocrm/campaigns:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 607724770,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:8c163040941d31d35f3c195b421a2ea17a4c737e7a903c8090f94218c45367e7",
-      "tags": [
-        "aerocrm/crm-sales:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 614246126,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
       ]
     },
     {
@@ -1093,16 +989,66 @@
       ]
     },
     {
-      "imageId": "sha256:60024e0a836ccb73bc8c7c2e0830f17e3dd3337387b8d8a8d099e21d47ba47f5",
+      "imageId": "sha256:0ab277928f1ac8aff4450d5ac958894aebb85701e98a983235c0328c20208a0b",
       "tags": [
-        "aerocrm/notification-delivery:352c42b2ee016534053d6f42f9c2cd0150714106"
+        "aerocrm/operations:352c42b2ee016534053d6f42f9c2cd0150714106"
       ],
-      "sizeBytes": 668475480,
+      "sizeBytes": 880249754,
       "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
       "reasons": [
         "canonical:schema-anchor",
         "verified-previous:schema-anchor",
         "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:0be91e150f1c61285c3c10b0c36537885a6cea11a056a46da3b01c6cb4cde9df",
+      "tags": [
+        "aerocrm/support:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 584222103,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:159cd801d1b3fc4f532a1afcc5d63bef3730c5fb28fae48f24928300df3ac7f0",
+      "tags": [
+        "aerocrm/support:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 584221702,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:1cb39ccc635e2ae23a8534b78c89e027b979a96c9ce867dba18774bc43bba237",
+      "tags": [
+        "aerocrm/platform:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 501079522,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:32051ef4220f46dfdc2d83395d6e7345bb1fcff9ed53dfe80e3c31e16bc867a0",
+      "tags": [
+        "aerocrm/reporting:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 421880837,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
       ]
     },
     {
@@ -1111,58 +1057,6 @@
         "aerocrm/reporting:352c42b2ee016534053d6f42f9c2cd0150714106"
       ],
       "sizeBytes": 611280609,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:6fa92b8eb85db311fd0689564efc8192676c8e6ce97bbeb534f873f32c52273c",
-      "tags": [
-        "aerocrm/crm-customers:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 606683893,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:d260f95e440ecc5fdc2b363d8e636a1d3a03cfe34b05fe5d4fdc530c13743814",
-      "tags": [
-        "aerocrm/identity:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 819705239,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:8c86a10b1411efdcbd3b02e71b9c6727b003c5636d2389bb848b7b7095a8bcba",
-      "tags": [
-        "aerocrm/billing:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 722854437,
-      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
-      "reasons": [
-        "canonical:schema-anchor",
-        "verified-previous:schema-anchor",
-        "marker:workspace-closure-compatible.sha"
-      ]
-    },
-    {
-      "imageId": "sha256:4d04f0a199ad8108c57d0c3692194f44e6c409001b0c704aad337b62e7e2da86",
-      "tags": [
-        "aerocrm/support:352c42b2ee016534053d6f42f9c2cd0150714106"
-      ],
-      "sizeBytes": 841534985,
       "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
       "reasons": [
         "canonical:schema-anchor",
@@ -1184,6 +1078,197 @@
       ]
     },
     {
+      "imageId": "sha256:43c2057dfcc4d56365dfd5836e0066107fe9fdfcd340c7264d4f89c8660fc3fd",
+      "tags": [
+        "aerocrm/operations:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 614924412,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:4c94e1285ebb51eda10ab3ef1d00333a387e07298ed41f278786d72ec29db3e4",
+      "tags": [
+        "aerocrm/crm-access:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 496928796,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:4d04f0a199ad8108c57d0c3692194f44e6c409001b0c704aad337b62e7e2da86",
+      "tags": [
+        "aerocrm/support:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 841534985,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:531da7c1604d860a815cde008cec1efdc20898b2916ae3909a1a519278d33d95",
+      "tags": [
+        "aerocrm/operations:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 603085831,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:597f12cd1a1fb2121c4a236c509d77ca8c03d907bd169d4dd7d366056ea6b99b",
+      "tags": [
+        "aerocrm/api-gateway:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 193312228,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:60024e0a836ccb73bc8c7c2e0830f17e3dd3337387b8d8a8d099e21d47ba47f5",
+      "tags": [
+        "aerocrm/notification-delivery:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 668475480,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:6d0e8e19efdb17734ababe0771db73ea647cf1dbc615015adaaa340c825ed241",
+      "tags": [
+        "aerocrm/crm-customers:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 528352634,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:6fa92b8eb85db311fd0689564efc8192676c8e6ce97bbeb534f873f32c52273c",
+      "tags": [
+        "aerocrm/crm-customers:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 606683893,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:7625761509873c8d84c4def3d748d09c39b31063e7a108644c326feedf121562",
+      "tags": [
+        "aerocrm/crm-customers:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 528353667,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:797f9f735c3ad0bd001f44332e57916d5657af0c64710d38c025f29f72e24570",
+      "tags": [
+        "aerocrm/notification-delivery:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 458649528,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:7affc3a89d806d93eb4d06059c28d39880a3cbcea6f2a532cb5ce19b8230a262",
+      "tags": [
+        "aerocrm/campaigns:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 607724770,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:8bbcccf5f45bc11e505ff275beb17f139ae4663cd67e457e36cb642c235d70ea",
+      "tags": [
+        "aerocrm/crm-access:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 718348699,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:8c163040941d31d35f3c195b421a2ea17a4c737e7a903c8090f94218c45367e7",
+      "tags": [
+        "aerocrm/crm-sales:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 614246126,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:8c86a10b1411efdcbd3b02e71b9c6727b003c5636d2389bb848b7b7095a8bcba",
+      "tags": [
+        "aerocrm/billing:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 722854437,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:9abc9ab30d767866affcc5301caf54bf012539b3cca485d6654c7c246372f888",
+      "tags": [
+        "aerocrm/campaigns:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 419318031,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
       "imageId": "sha256:9d23ff4fb069eeac386ff650cf298597700f2e778a2dc1ea1b88e0ee78c5ea04",
       "tags": [
         "aerocrm/api-gateway:352c42b2ee016534053d6f42f9c2cd0150714106"
@@ -1195,8 +1280,171 @@
         "verified-previous:schema-anchor",
         "marker:workspace-closure-compatible.sha"
       ]
+    },
+    {
+      "imageId": "sha256:a31882d256c04a78c82ac03610c5b59035293a064acb6cafe9edee4862437791",
+      "tags": [
+        "aerocrm/billing:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 499557577,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:b41cece319aba88e7e630290e611e6730bb219ab5997e2f65a58bd4ae252e63e",
+      "tags": [
+        "aerocrm/identity:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 564972272,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:b471d1413439eda212d9eba523f8facf865380bab43c4f4cec6eb3084d74ffa4",
+      "tags": [
+        "aerocrm/reporting:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 421893357,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:b53bfb426cfaa03bd3a03984b35c10beb18470e29dec348a4347a58ea6132819",
+      "tags": [
+        "aerocrm/api-gateway:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 193312229,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:b8cb8e57bc86d164b75c0cb46128c9733dbe5770ade3a776522c57871977c376",
+      "tags": [
+        "aerocrm/crm-intake:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 421676006,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:c0f83fad02f5e21fa1596ad99b546f07f379a52a42a5b935500afe9b8725c403",
+      "tags": [
+        "aerocrm/crm-sales:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 423980712,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:c37ea53ed565515dd8f4b18b47a3f74a0f46533bdd9e6148eb0a2c13a226093a",
+      "tags": [
+        "aerocrm/identity:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 564960593,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:c4cfe763fd282c0949b51f5925dbf1e21eec2419d320f9faa4eaf85706896897",
+      "tags": [
+        "aerocrm/notification-delivery:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 458649903,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:d260f95e440ecc5fdc2b363d8e636a1d3a03cfe34b05fe5d4fdc530c13743814",
+      "tags": [
+        "aerocrm/identity:352c42b2ee016534053d6f42f9c2cd0150714106"
+      ],
+      "sizeBytes": 819705239,
+      "revision": "352c42b2ee016534053d6f42f9c2cd0150714106",
+      "reasons": [
+        "canonical:schema-anchor",
+        "verified-previous:schema-anchor",
+        "marker:workspace-closure-compatible.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:e69ce2bb4080d85a6ebe1164740c6ee672bde2c4419e1662f3a7034b2d7afa1f",
+      "tags": [
+        "aerocrm/billing:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 499557408,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:e856c5fd55f3ca91a0e14f619c7b891d1065925a8319a9c37cfc8f9b7c9ce4b1",
+      "tags": [
+        "aerocrm/crm-sales:495ef6e172d5367ff98afb77bba5e62fcbd9b530"
+      ],
+      "sizeBytes": 423981691,
+      "revision": "495ef6e172d5367ff98afb77bba5e62fcbd9b530",
+      "reasons": [
+        "canonical",
+        "container-reference",
+        "marker:backend.sha",
+        "marker:workspace-closure-enabled.sha"
+      ]
+    },
+    {
+      "imageId": "sha256:ea7235f29216cbe11f9ac44acccc9311df56ae0c46771d9a8b08fa27cf364f56",
+      "tags": [
+        "aerocrm/crm-intake:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 421673644,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
+    },
+    {
+      "imageId": "sha256:f2cc632dcc2ec4002df760e0a8b6c3d737dd5e6d7788cb6a2d41494e31a30276",
+      "tags": [
+        "aerocrm/campaigns:4c6f816eb58eaffea1579b2eed445f0be25324f5"
+      ],
+      "sizeBytes": 419317783,
+      "revision": "4c6f816eb58eaffea1579b2eed445f0be25324f5",
+      "reasons": [
+        "verified-previous"
+      ]
     }
   ],
-  "estimatedImageBytes": 69941608838,
+  "estimatedImageBytes": 55333176098,
   "note": "Image sizes share layers and are not reclaimable disk estimates. No deletion is authorized or performed."
 }
