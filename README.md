@@ -379,6 +379,13 @@ Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.
 `scripts/publish-android-apk.mjs` verifies its certificate, publishes only the versioned
 APK object to the agreed `content-files` bucket, verifies anonymous download bytes, and
 updates the landing release metadata with `https://aerocrm.space/downloads/aeroCRM.apk`.
+It reads the explicit deployment-only `ANDROID_APK_S3_ENDPOINT`, `REGION`, `BUCKET`,
+`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, and `FORCE_PATH_STYLE` fields from the private
+parent `.env`. Avatar runtime credentials are independently restricted to
+`content-files/identity/avatars/*` and are never used by this publisher. The existing
+public versioned APK is the reviewed exception; runtime Mail, Support, Identity and
+Messenger objects in the Standard PRIVATE `content-files` bucket stay private.
+The Cold PRIVATE `backup-services` bucket stores only `database-backups/`.
 The exact Nginx route proxies only the reviewed versioned S3 object over verified HTTPS,
 without forwarding browser credentials. Update that fixed target for each new APK version
 before running the publisher. The frontend release transfers the reviewed config and,

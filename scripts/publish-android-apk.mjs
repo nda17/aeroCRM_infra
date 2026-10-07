@@ -31,8 +31,8 @@ const require = createRequire(path.join(root, 'aeroCRM_monorepo/aeroCRM_services
 const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const env = parseEnv(fs.readFileSync(path.join(root, '.env'), 'utf8'));
 const input = name => {
-  const value = env[`IDENTITY_AVATAR_S3_${name}`];
-  assert(value, `Missing S3 ${name}`);
+  const value = env[`ANDROID_APK_S3_${name}`];
+  assert(value, `Missing ANDROID_APK_S3_${name}`);
   return value;
 };
 const Bucket = input('BUCKET');

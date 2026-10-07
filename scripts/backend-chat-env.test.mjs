@@ -21,7 +21,7 @@ const values = Object.fromEntries(
       "true",
       "https://storage.example.test",
       "us-east-1",
-      "backup-services",
+      "content-files",
       "chat-independent-access-key",
       "chat-independent-secret-key",
       "true",

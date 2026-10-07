@@ -27,7 +27,7 @@ export function validateChatBundle(bytes, expectedHash) {
   try { endpoint = new URL(values.CRM_CHAT_S3_ENDPOINT); } catch { throw new Error('Invalid Chat storage endpoint'); }
   check(endpoint.protocol === 'https:' && !endpoint.username && !endpoint.password && !endpoint.search && !endpoint.hash,
     'Invalid Chat storage endpoint');
-  check(values.CRM_CHAT_S3_BUCKET === 'backup-services', 'Chat storage must use the reviewed existing private bucket');
+  check(values.CRM_CHAT_S3_BUCKET === 'content-files', 'Chat storage must use the reviewed existing private bucket');
   return values;
 }
 function privateRegular(file) {
@@ -49,7 +49,7 @@ export function chatEnvironmentCandidate({ bundleFile, bundleHash, sourceDirecto
     check(!['CRM_MAIL_S3_ACCESS_KEY_ID', 'CRM_BACKUP_S3_ACCESS_KEY_ID', 'SUPPORT_S3_ACCESS_KEY_ID', 'IDENTITY_AVATAR_S3_ACCESS_KEY_ID']
       .some(key => existing[key] === values.CRM_CHAT_S3_ACCESS_KEY_ID), 'Chat storage requires an independent access key');
   }
-  const tupleFields = ['ENDPOINT', 'REGION', 'BUCKET', 'FORCE_PATH_STYLE'];
+  const tupleFields = ['ENDPOINT', 'REGION', 'FORCE_PATH_STYLE'];
   const trusted = ['crm-customers-api.env', 'crm-customers-mail-sync.env', 'crm-customers-mail-send.env']
     .map(name => {
       check(source.has(name), 'Trusted Mail storage environment is required');

@@ -30,6 +30,8 @@ const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-r
 const importMigration = '20261001000000_crm_file_imports';
 const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-customization-reviewed-inventory.json', import.meta.url)));
 const meeting3Inventory = JSON.parse(fs.readFileSync(new URL('./meeting3-reviewed-inventory.json', import.meta.url)));
+const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
+const messengerEntry = messengerInventory.owners['crm-access'];
 const collaborationInventory = JSON.parse(fs.readFileSync(new URL('./workspace-collaboration-reviewed-inventory.json', import.meta.url)));
 const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
@@ -70,6 +72,7 @@ function closureImageReviewed(service, sha, execute = run) {
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
+  if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -87,6 +90,13 @@ function closureImageReviewed(service, sha, execute = run) {
   ]));
   const inventoryIndex = result.inventoryIndex ?? (accepted.length === 1 ? 0 : -1);
   return result.migrations === true && Number.isInteger(inventoryIndex) && result.aclSha === accepted[inventoryIndex]?.aclSha256;
+}
+function assertMessengerCapability({ markerPresent, recorded, valid, completed, capable }) {
+  assert([markerPresent, recorded, valid, completed, capable].every(value => typeof value === 'boolean'),
+    'Invalid messenger storage capability state');
+  assert(valid, 'Persisted messenger migration differs from its reviewed checksum');
+  assert(!(markerPresent || recorded) || (completed && capable),
+    'Candidate Access image cannot preserve permanent messenger storage capability');
 }
 function commerceBusinessDataQuery() {
   return `SELECT json_build_object('businessWrites', ${commerceBusinessDataTables
@@ -181,6 +191,20 @@ function inspectDatabase(identity, query) {
 }
 
 if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
+  assert.doesNotThrow(() => assertMessengerCapability({ markerPresent: false, recorded: false, valid: true, completed: false, capable: false }),
+    'An old image remains valid before the permanent messenger capability is recorded');
+  for (const markerPresent of [false, true]) for (const recorded of [false, true])
+    assert.doesNotThrow(() => assertMessengerCapability({ markerPresent, recorded, valid: true, completed: true, capable: true }));
+  assert.throws(() => assertMessengerCapability({ markerPresent: true, recorded: false, valid: true, completed: false, capable: true }),
+    /cannot preserve permanent messenger storage capability/);
+  assert.throws(() => assertMessengerCapability({ markerPresent: false, recorded: true, valid: true, completed: false, capable: true }),
+    /cannot preserve permanent messenger storage capability/);
+  assert.throws(() => assertMessengerCapability({ markerPresent: false, recorded: true, valid: true, completed: true, capable: false }),
+    /cannot preserve permanent messenger storage capability/);
+  assert.throws(() => assertMessengerCapability({ markerPresent: false, recorded: false, valid: false, completed: true, capable: true }),
+    /differs from its reviewed checksum/);
+  assert.throws(() => assertMessengerCapability({ markerPresent: false, recorded: false, valid: true, completed: true, capable: 'true' }),
+    /Invalid messenger storage capability state/);
   let probe;
   const capabilities = imageCapabilities('aerocrm/crm-sales:fixture', [commerceMigration],
     { [commerceMigration]: commerceChecksum }, (_label, executable, args) => {
@@ -257,6 +281,26 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(previousNotifications, true), false);
   assert.equal(reviewCustomers(previousWorkspace, true), false);
   assert.equal(reviewCustomers(importInventory.owners['crm-customers'], true), false);
+  const accessPairs = [closureInventory.owners['crm-access'], uxInventory.owners['crm-access'],
+    collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry];
+  const reviewAccess = (pair, { badChecksum = false, badAcl = false } = {}) => {
+    let calls = 0;
+    const result = closureImageReviewed('crm-access', 'c'.repeat(40), (_label, executable, args) => {
+      calls++;
+      assert.equal(executable, 'docker');
+      if (calls === 1) return 'c'.repeat(40);
+      const script = args.at(-1);
+      for (const reviewed of accessPairs)
+        for (const checksum of Object.values(reviewed.migrations)) assert(script.includes(checksum));
+      return JSON.stringify({ migrations: !badChecksum, inventoryIndex: accessPairs.indexOf(pair),
+        aclSha: badAcl ? closureInventory.owners['crm-access'].aclSha256 : pair.aclSha256 });
+    });
+    assert.equal(calls, 2);
+    return result;
+  };
+  assert.equal(reviewAccess(messengerEntry), true, 'Access image with the reviewed messenger migration and ACL is accepted');
+  assert.equal(reviewAccess(messengerEntry, { badChecksum: true }), false);
+  assert.equal(reviewAccess(messengerEntry, { badAcl: true }), false);
   assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: true });
   assert.throws(() => assertLegacySingleSession('0'.repeat(40), { singleSessionPolicy: true }), /reviewed pre-migration Identity baseline/);
   assert.throws(() => assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: false }), /exact single-session database guards/);
@@ -357,6 +401,21 @@ assert(Object.values(uxCapabilities).every(value => typeof value === 'boolean'),
 const meeting3Capabilities = Object.fromEntries(Object.entries(meeting3Inventory.owners).map(([service, entry]) => [service,
   imageCapabilities(candidateImage(service), [entry.migration], { [entry.migration]: entry.migrations[entry.migration] })[0]]));
 assert(Object.values(meeting3Capabilities).every(value => typeof value === 'boolean'), 'Invalid meeting 3 image compatibility inventory');
+// Permanent schema/config capability is independent of business rows and precedes the fast-success path.
+const messengerCapable = imageCapabilities(candidateImage('crm-access'), [messengerEntry.migration],
+  { [messengerEntry.migration]: messengerEntry.migrations[messengerEntry.migration] })[0];
+const messengerIdentity = readDatabaseUrl(crmAccessEnvFile, 'CRM_ACCESS_DATABASE_URL', {
+  database: 'aerocrm_crm_access', role: 'aerocrm_crm_access_migration', schema: 'crm_access'
+});
+const messengerState = inspectDatabase(messengerIdentity, `SELECT json_build_object(
+  'recorded', EXISTS(SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}'),
+  'valid', (SELECT count(*)<=1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}')
+    AND NOT EXISTS(SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}'
+      AND (checksum<>'${messengerEntry.migrations[messengerEntry.migration]}' OR rolled_back_at IS NOT NULL)),
+  'completed', (SELECT count(*)=1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}'
+    AND checksum='${messengerEntry.migrations[messengerEntry.migration]}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
+assertMessengerCapability({ markerPresent: fs.existsSync('/opt/aerocrm/releases/runtime-storage-forward.json'),
+  recorded: messengerState.recorded, valid: messengerState.valid, completed: messengerState.completed, capable: messengerCapable });
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&

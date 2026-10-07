@@ -13,6 +13,9 @@ import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateStat
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
+import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences } from './backend-runtime-storage-env.mjs';
+import { createRequire } from 'node:module';
+const { validateManifest: validateStorageManifest } = createRequire(import.meta.url)('./runtime-storage-copy.cjs');
 import { atomic, publishRabbitmqConfig, recoverRabbitmqConfig, validateRabbitmqContainer } from './backend-rabbitmq-config.mjs';
 
 const root = '/opt/aerocrm';
@@ -90,8 +93,20 @@ assert(chatEnvInstall === 'true' ? /^[a-f0-9]{64}$/.test(chatEnvBeforeHash) && /
   : !chatEnvBeforeHash && !chatEnvBundleHash, 'Invalid reviewed Chat env hashes');
 assert(chatEnvInstall !== 'true' || (meeting3 === 'true' && mailEnvInstall === 'false'),
   'Chat installation requires the isolated meeting 3 release');
-const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true';
-const envBeforeHash = chatEnvInstall === 'true' ? chatEnvBeforeHash : mailEnvBeforeHash;
+const storageInstall = process.env.CRM_RUNTIME_STORAGE_INSTALL === 'true';
+assert(['true', 'false'].includes(process.env.CRM_RUNTIME_STORAGE_INSTALL ?? 'false'), 'Invalid runtime storage installation flag');
+const storageBeforeHash = process.env.CRM_RUNTIME_STORAGE_BEFORE_HASH ?? '';
+const storageBundleHash = process.env.CRM_RUNTIME_STORAGE_BUNDLE_HASH ?? '';
+const storageManifestHash = process.env.CRM_RUNTIME_STORAGE_MANIFEST_HASH ?? '';
+assert(storageInstall ? [storageBeforeHash, storageBundleHash, storageManifestHash].every(hash => /^[a-f0-9]{64}$/.test(hash)) :
+  !storageBeforeHash && !storageBundleHash && !storageManifestHash, 'Invalid reviewed storage hashes');
+assert(!storageInstall || (meeting3 === 'true' && mailEnvInstall === 'false' && chatEnvInstall === 'false' && uniformManifest(manifest)),
+  'Runtime storage requires the isolated full-manifest meeting 3 controller');
+const storageMarker = `${releases}/runtime-storage-forward.json`;
+const storageBundleFile = `${stagedRoot}/runtime-storage-env.json`;
+const storageManifestFile = `${stagedRoot}/storage-manifest.json`;
+const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true' || storageInstall;
+const envBeforeHash = storageInstall ? storageBeforeHash : chatEnvInstall === 'true' ? chatEnvBeforeHash : mailEnvBeforeHash;
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
 fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
@@ -291,6 +306,20 @@ function applyConfiguration(state) {
   validateSnapshot(state);
   // Apply under the shared lock; stable host paths prevent unnecessary bind-mount changes.
   const source = `${configDirectory(state)}/env/backend`;
+  if (fs.existsSync(storageMarker)) {
+    const marker = JSON.parse(privateBytes(storageMarker));
+    assert.equal(marker.targetBucket, 'content-files');
+    assert.deepEqual(marker.provider, { endpoint: 'https://s3.twcstorage.ru', region: 'ru-1', forcePathStyle: true },
+      'Forward storage marker provider tuple differs from the reviewed contract');
+    for (const [owner, names] of Object.entries(storageOwners)) for (const name of names) {
+      const values = parseEnv(privateBytes(`${source}/${name}`).toString('utf8'));
+      assert.equal(values[`${owner}_S3_BUCKET`], 'content-files', 'Old runtime storage configuration restore is forbidden');
+      for (const [field, expected] of Object.entries({ ENDPOINT: marker.provider.endpoint, REGION: marker.provider.region, FORCE_PATH_STYLE: String(marker.provider.forcePathStyle) }))
+        assert.equal(values[`${owner}_S3_${field}`], expected, 'Forward storage provider tuple differs from its sealed capability');
+      assert.equal(digest(`${values[`${owner}_S3_ACCESS_KEY_ID`]}\0${values[`${owner}_S3_SECRET_ACCESS_KEY`]}`), marker.principals[owner],
+        'Forward storage principal differs from its sealed capability');
+    }
+  }
   fs.mkdirSync(`${root}/env/backend`, { recursive: true, mode: 0o700 });
   const expected = fs.readdirSync(source);
   for (const name of expected) atomic(`${root}/env/backend/${name}`, fs.readFileSync(`${source}/${name}`));
@@ -319,7 +348,156 @@ function compatibility(state) {
     throw error;
   }
 }
+function storageDatabase(service, sql) {
+  const schema = service.replace('-', '_');
+  // Support has no migration env; its immutable runtime binding already grants own-table SELECT.
+  const runtimeInspection = service === 'support';
+  const file = runtimeInspection ? `${configDirectory(previous)}/env/backend/support-api.env` : `${root}/env/migrations/${service}.env`;
+  const values = parseEnv(privateBytes(file).toString('utf8'));
+  let url;
+  try { url = new URL(values[`${schema.toUpperCase()}_DATABASE_URL`]); } catch { throw new Error('Invalid private storage inspection binding'); }
+  const principal = `aerocrm_${schema}_${runtimeInspection ? 'runtime' : 'migration'}`;
+  assert.equal(url.protocol, 'postgresql:'); assert.equal(url.hostname, '127.0.0.1');
+  assert(!url.port || url.port === '5432'); assert.equal(url.pathname, `/aerocrm_${schema}`);
+  assert.equal(decodeURIComponent(url.username), principal); assert(url.password && !url.hash && url.searchParams.getAll('schema').length === 1 && url.searchParams.get('schema') === schema);
+  return JSON.parse(execute('Frozen owner storage reference inspection', 'docker', ['run', '--rm', '--network', 'host',
+    '--env', 'PGPASSWORD', '--entrypoint', 'psql', 'postgres:18', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
+    '-h', '127.0.0.1', '-p', '5432', '-U', principal, '-d', `aerocrm_${schema}`, '-c', `BEGIN READ ONLY; SET LOCAL TIME ZONE 'UTC'; ${sql} COMMIT;`],
+    { env: { ...process.env, PGPASSWORD: decodeURIComponent(url.password) } }));
+}
+function verifyStorageReferences(objects) {
+  const mail = storageDatabase('crm-customers', `SELECT COALESCE(json_agg(row),'[]'::json)::text FROM (
+    SELECT json_build_array('mail','attachment',private_object_key,state,sha256,byte_size,
+      CASE WHEN expires_at IS NULL THEN NULL ELSE to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END) AS row
+      FROM crm_customers.mail_attachments
+    UNION ALL SELECT json_build_array('mail','mime',mime_object_key,state,mime_hash,NULL,NULL)
+      FROM crm_customers.mail_send_intents) r;`);
+  const support = storageDatabase('support', `SELECT COALESCE(json_agg(json_build_array('support','attachment',storage_key,status::text,
+    content_hash,byte_size,CASE WHEN expires_at IS NULL THEN NULL ELSE to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END)), '[]'::json)::text FROM support.web_attachments;`);
+  const rows = [...mail, ...support];
+  assert.equal(storageReferenceHash(rows), objects.referencesHash, 'Frozen storage reference snapshot changed since approval');
+  const allowed = { 'mail/attachment': ['DEFERRED','UNAVAILABLE','VALIDATED'], 'mail/mime': ['ACCEPTED'], 'support/attachment': ['ATTACHED','DELETED'] };
+  assert(rows.length === 164 && rows.every(([owner, kind, key, state]) => allowed[`${owner}/${kind}`]?.includes(state) &&
+    (owner === 'mail' && kind === 'attachment' && state !== 'VALIDATED' ? key === null : !!key)),
+    'Reviewed bounded storage reference states changed');
+  const required = rows.filter(([owner, , , state]) => owner === 'mail' ? ['VALIDATED','ACCEPTED'].includes(state) : state === 'ATTACHED');
+  assert.equal(required.length, 7); assert.equal(new Set(required.map(row => row[2])).size, 7);
+  assert.equal(required.filter(row => row[0] === 'mail' && row[1] === 'attachment').length, 2);
+  assert.equal(required.filter(row => row[0] === 'mail' && row[1] === 'mime').length, 4);
+  assert.equal(required.filter(row => row[0] === 'support').length, 1);
+  for (const [owner, kind, key, , sha256, size] of required) {
+    const item = objects.objects.find(item => item.owner === owner && item.key === key);
+    assert(item && item.sha256 === sha256 && (kind === 'mime' || item.size === size), 'Required storage reference lacks a verified destination object');
+  }
+  assert(objects.objects.every(item => required.some(row => row[0] === item.owner && row[2] === item.key)),
+    'Reviewed transfer contains an unexpected object');
+  const mailDrain = storageDatabase('crm-customers', `SELECT json_build_object('jobsDrained',NOT EXISTS(
+    SELECT 1 FROM crm_customers.mail_jobs WHERE state='RUNNING' OR lease_owner IS NOT NULL OR lease_until IS NOT NULL),
+    'intentsDrained',NOT EXISTS(SELECT 1 FROM crm_customers.mail_send_intents WHERE state IN ('PREPARING','SENDING')))::text;`);
+  const supportDrain = storageDatabase('support', `SELECT json_build_object('drained',NOT EXISTS(
+    SELECT 1 FROM support.web_attachments WHERE lease_token IS NOT NULL OR lease_expires_at IS NOT NULL
+      OR status::text IN ('PREPARED','TEMPORARY','DELETE_PENDING','DELETING')))::text;`);
+  assert([...Object.values(mailDrain), ...Object.values(supportDrain)].every(value => value === true),
+    'Runtime storage freeze must contain no active leases or incomplete physical writes');
+  const access = storageDatabase('crm-access', `SELECT json_build_object('attachmentsEmpty',NOT EXISTS(SELECT 1 FROM crm_access.crm_chat_attachments),
+    'uploadsEmpty',NOT EXISTS(SELECT 1 FROM crm_access.crm_team_command_receipts WHERE command_type='chat.upload'))::text;`);
+  assert(Object.values(access).every(value => value === true), 'Legacy Chat history requires a separate reviewed transfer');
+  const identity = storageDatabase('identity', `SELECT json_build_object(
+    'paths',COALESCE((SELECT json_agg(avatar_path) FROM identity.users WHERE avatar_path IS NOT NULL),'[]'::json),
+    'mediaEmpty',NOT EXISTS(SELECT 1 FROM identity.avatar_media_objects))::text;`);
+  validateFrozenAvatarReferences(identity);
+}
+function storageInputs() {
+  const values = validateRuntimeStorageBundle(privateBytes(storageBundleFile), storageBundleHash);
+  const objects = validateStorageManifest(privateBytes(storageManifestFile), storageManifestHash);
+  const tuple = { schemaVersion: 1, releaseSha: sha, infraSha: process.env.INFRA_SHA,
+    beforeEnvHash: storageBeforeHash, afterEnvHash: expectedEnvHash, bundleHash: storageBundleHash,
+    manifestHash: storageManifestHash, targetBucket: 'content-files', provider: objects.provider,
+    principals: Object.fromEntries(Object.keys(storageOwners).map(owner => [owner,
+      digest(`${values[`${owner}_S3_ACCESS_KEY_ID`]}\0${values[`${owner}_S3_SECRET_ACCESS_KEY`]}`)])) };
+  if (fs.existsSync(storageMarker)) {
+    const marker = JSON.parse(privateBytes(storageMarker));
+    assert.deepEqual(Object.fromEntries(Object.keys(tuple).map(key => [key, marker[key]])), tuple,
+      'Forward-only storage recovery requires the original sealed tuple');
+  }
+  return { values, objects, tuple };
+}
+function withStorageSource(action) {
+  const source = parseEnv(privateBytes(`${configDirectory(previous)}/env/backend/operations-worker.env`).toString('utf8'));
+  const sourceFile = `${stagedRoot}/private-source-storage-${randomUUID()}.json`;
+  const values = Object.fromEntries(['ENDPOINT', 'REGION', 'FORCE_PATH_STYLE', 'ACCESS_KEY_ID', 'SECRET_ACCESS_KEY'].map(field => [field, source[`CRM_BACKUP_S3_${field}`]]));
+  assert.equal(values.ENDPOINT, 'https://s3.twcstorage.ru'); assert.equal(values.REGION, 'ru-1'); assert.equal(values.FORCE_PATH_STYLE, 'true');
+  assert(values.ACCESS_KEY_ID && values.SECRET_ACCESS_KEY);
+  const runtimeValues = validateRuntimeStorageBundle(privateBytes(storageBundleFile), storageBundleHash);
+  assert(Object.keys(storageOwners).every(owner => runtimeValues[`${owner}_S3_ACCESS_KEY_ID`] !== values.ACCESS_KEY_ID),
+    'Migration capability must never be a runtime storage principal');
+  fs.writeFileSync(sourceFile, JSON.stringify({ endpoint: values.ENDPOINT, region: values.REGION, forcePathStyle: true,
+    credentials: { accessKeyId: values.ACCESS_KEY_ID, secretAccessKey: values.SECRET_ACCESS_KEY } }) + '\n', { mode: 0o600, flag: 'wx' });
+  try { return action(sourceFile); }
+  finally { fs.rmSync(sourceFile, { force: true }); }
+}
+function storageCopy(mode) {
+  return withStorageSource(sourceFile => execute(`Reviewed storage ${mode}`, 'timeout', ['310s', 'docker', 'run', '--rm', '--read-only', '--user', '0:0',
+    '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
+    '--env', `STORAGE_MANIFEST_HASH=${storageManifestHash}`, '--env', `STORAGE_COPY_MODE=${mode}`,
+    '--mount', `type=bind,src=${storageBundleFile},dst=/reviewed/runtime-storage-env.json,readonly`,
+    '--mount', `type=bind,src=${storageManifestFile},dst=/reviewed/storage-manifest.json,readonly`,
+    '--mount', `type=bind,src=${sourceFile},dst=/reviewed/source-storage.json,readonly`,
+    '--mount', `type=bind,src=${stagedRoot}/scripts/runtime-storage-copy.cjs,dst=/reviewed/runtime-storage-copy.cjs,readonly`,
+    '--entrypoint', 'node', `aerocrm/crm-access:${sha}`, '/reviewed/runtime-storage-copy.cjs'], { timeout: 320000 }));
+}
+function runtimeStorageProbe() {
+  return withStorageSource(sourceFile => {
+    for (const owner of Object.keys(storageOwners)) execute('Reviewed independent runtime storage scope probe', 'timeout', ['130s',
+      'docker', 'run', '--rm', '--read-only', '--user', '0:0', '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
+      '--env', `STORAGE_OWNER=${owner}`, '--mount', `type=bind,src=${storageBundleFile},dst=/reviewed/chat-env.json,readonly`,
+      '--mount', `type=bind,src=${sourceFile},dst=/reviewed/source-storage.json,readonly`,
+      '--mount', `type=bind,src=${stagedRoot}/scripts/chat-storage-probe.cjs,dst=/reviewed/chat-storage-probe.cjs,readonly`,
+      '--entrypoint', 'node', `aerocrm/crm-access:${sha}`, '/reviewed/chat-storage-probe.cjs']);
+  });
+}
+function runStorageCutover() {
+  const { objects, tuple } = storageInputs();
+  // Mail's worker shutdown can drain a current 30-second operation while Access authorization stays alive.
+  const mailWriters = runtime().filter(c => c.running && ['crm-customers-api', 'crm-customers-mail-sync', 'crm-customers-mail-send'].includes(c.role));
+  if (mailWriters.length) execute('Drain Mail storage writers', 'docker', ['stop', '-t', '60', ...mailWriters.map(c => c.id)]);
+  const otherWriters = runtime().filter(c => c.running && ['identity-api', 'support-api', 'crm-access-api'].includes(c.role));
+  if (otherWriters.length) execute('Stop remaining runtime storage writers', 'docker', ['stop', '-t', '60', ...otherWriters.map(c => c.id)]);
+  assert(!runtime().some(c => c.running && Object.values(storageOwners).flat().map(name => name.slice(0, -4)).includes(c.role)),
+    'Every runtime storage writer and sweeper must be stopped before freeze');
+  if (!fs.existsSync(storageMarker)) verifyStorageReferences(objects);
+  runtimeStorageProbe();
+  if (fs.existsSync(storageMarker)) {
+    // The durable capability proves the original frozen references and copy were already verified.
+    // New writes made by a partially started target belong to content-files and must not be resealed as source data.
+    storageCopy('verify');
+  } else {
+    storageCopy('copy');
+    writeJson(storageMarker, { ...tuple, phase: 'forward-committed', sourceMailCleaned: false });
+  }
+  console.log('Seven reviewed runtime objects verified; forward-only storage capability committed');
+}
+function completeStorageCutover() {
+  const { tuple } = storageInputs();
+  assert(fs.existsSync(storageMarker), 'Forward storage capability missing after release commit');
+  const marker = JSON.parse(privateBytes(storageMarker));
+  applyConfiguration(target);
+  const current = verifyRuntime(target);
+  assert(current.filter(c => Object.values(storageOwners).flat().map(name => name.slice(0, -4)).includes(c.role)).every(c => c.running));
+  // Revoke stale delete-ready evidence before every fresh proof, including a same-tuple retry.
+  writeJson(storageMarker, { ...tuple, phase: 'verify-delete-ready', sourceMailCleaned: marker.sourceMailCleaned, supportDeleteReady: false });
+  if (!marker.sourceMailCleaned) {
+    storageCopy('cleanup-mail');
+    writeJson(storageMarker, { ...tuple, phase: 'mail-cleaned', sourceMailCleaned: true, supportDeleteReady: false });
+  }
+  // Delete-ready is fresh evidence; a completed/retried Mail cleanup cannot certify the Support source boundary.
+  storageCopy('verify-support-boundary');
+  writeJson(storageMarker, { ...tuple, phase: 'verified', sourceMailCleaned: true, supportDeleteReady: true });
+  console.log(JSON.stringify({ storage: 'content-files', migratedObjects: 7, sourceMailObjectsRemoved: 6,
+    backupObjectsPreserved: true, supportSourceDeleted: false, supportDeleteReady: true }));
+}
 function runMigrations() {
+  if (storageInstall) runStorageCutover();
   if (chatEnvInstall === 'true') {
     const bundleFile = `${stagedRoot}/crm-access-chat-env.json`;
     const stat = fs.lstatSync(bundleFile);
@@ -406,7 +584,9 @@ if (envInstall) {
   assert.equal(sourceState.envHash, envBeforeHash, 'Reviewed Customers before env hash mismatch');
   const candidate = `${stagedRoot}/private-env-candidate-${randomUUID()}`;
   try {
-    if (chatEnvInstall === 'true') stageChatEnvironment({ bundleFile: `${stagedRoot}/crm-access-chat-env.json`,
+    if (storageInstall) stageRuntimeStorageEnvironment({ bundleFile: storageBundleFile, bundleHash: storageBundleHash,
+      sourceDirectory: `${configDirectory(sourceState)}/env/backend`, candidateDirectory: candidate });
+    else if (chatEnvInstall === 'true') stageChatEnvironment({ bundleFile: `${stagedRoot}/crm-access-chat-env.json`,
       bundleHash: chatEnvBundleHash, sourceDirectory: `${configDirectory(sourceState)}/env/backend`,
       candidateDirectory: candidate });
     else stageMailEnvironment({ bundleFile: `${stagedRoot}/crm-customers-mail-env.json`,
@@ -422,7 +602,9 @@ if (pending) assert.deepEqual(pending.target, target, 'Pending target config or 
 recoverRabbitmq(previous, pending ? target : null);
 if (canonical && stateKey(canonical) === stateKey(target)) {
   const retained = verifyRuntime(target); readiness(target, closureMigration === 'true');
-  applyConfiguration(target); projections(target); fs.rmSync(pendingFile, { force: true });
+  applyConfiguration(target); projections(target);
+  if (storageInstall) completeStorageCutover();
+  fs.rmSync(pendingFile, { force: true });
   fs.rmSync(`${releases}/backend-rollback-blocked.pending`, { force: true });
   const unchanged = retained.map(({ role, id }) => ({ role, id }));
   console.log(JSON.stringify({ releaseSha: sha, changedApps: [], noSwitch: true, before: unchanged, after: unchanged,
@@ -451,7 +633,7 @@ const outcome = runReleaseTransaction({
     inspectImages(manifest); after = verifyRuntime(target); readiness(target, closureMigration === 'true');
   },
   commit: () => writeJson(stateFile, target),
-  project: () => { applyConfiguration(target); projections(target); },
+  project: () => { applyConfiguration(target); projections(target); if (storageInstall) completeStorageCutover(); },
   clearPending: () => {
     fs.rmSync(pendingFile, { force: true });
     fs.rmSync(`${releases}/backend-rollback-blocked.pending`, { force: true });
@@ -460,6 +642,7 @@ const outcome = runReleaseTransaction({
   isCommitted: () => fs.existsSync(stateFile) &&
     stateKey(validateState(JSON.parse(fs.readFileSync(stateFile, 'utf8')))) === stateKey(target),
   validatePrevious: () => verifyRuntime(previous),
+  forwardOnly: () => storageInstall,
   rollback: () => {
     inspectImages(previous.manifest); compatibility(previous);
     applyConfiguration(previous);

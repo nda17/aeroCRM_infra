@@ -8,6 +8,12 @@ import { parseEnv } from 'node:util';
 import { validateManifest, uniformManifest } from './backend-release-state.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(new URL('./meeting3-reviewed-inventory.json', import.meta.url)));
+const runtimeStorage = process.env.CRM_RUNTIME_STORAGE_INSTALL === 'true';
+if (runtimeStorage) {
+  const overlay = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
+  assert.equal(overlay.schemaVersion, 1); assert.deepEqual(Object.keys(overlay.owners), ['crm-access']);
+  inventory.owners['crm-access'] = overlay.owners['crm-access'];
+}
 const services = ['crm-access', 'crm-intake', 'crm-sales'];
 const privileges = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'];
 const sequencePrivileges = ['SELECT', 'USAGE', 'UPDATE'];
@@ -246,6 +252,10 @@ function postflight(identity) {
     'fence', (SELECT count(*)=1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=${literal(schema)} AND p.proname='assert_workspace_open' AND p.pronargs=1 AND p.proargtypes='2950'::oidvector)
   )::text;`);
   assert(Object.values(state).every(value => value === true), `${identity.service} meeting 3 constraints or guards differ`);
+  if (runtimeStorage && identity.service === 'crm-access') {
+    const prefix = psql(identity, `SELECT json_build_object('prefix', (SELECT count(*)=1 AND bool_and(c.convalidated AND pg_get_constraintdef(c.oid) LIKE '%messenger/%' AND pg_get_constraintdef(c.oid) NOT LIKE '%chat/%') FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='crm_access' AND t.relname='crm_chat_attachments' AND c.contype='c' AND (SELECT attnum FROM pg_attribute WHERE attrelid=t.oid AND attname='private_object_key' AND NOT attisdropped)=ANY(c.conkey)))::text;`);
+    assert.equal(prefix.prefix, true, 'Messenger storage prefix constraint differs');
+  }
 }
 
 function migrate(identity, sha, acl) {

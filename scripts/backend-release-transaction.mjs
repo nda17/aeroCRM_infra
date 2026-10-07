@@ -17,6 +17,10 @@ export function runReleaseTransaction(actions, { migrationRequested = false } = 
   } catch (error) {
     actions.report(error);
     if (committed || actions.isCommitted()) return { status: 'projection-repair-required', error };
+    if (actions.forwardOnly?.()) {
+      actions.blockRollback(error);
+      return { status: 'fix-forward-required', error };
+    }
     if (!switchStarted && !migrationRequested && !error.requiresRollback) {
       try { actions.validatePrevious(); } catch (validationError) {
         actions.blockRollback(validationError);

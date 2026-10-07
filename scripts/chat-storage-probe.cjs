@@ -1,9 +1,15 @@
-// Reviewed probe executed inside the exact-SHA Access image, never with admin credentials.
+// Reviewed runtime-key scope probe in the exact-SHA Access image. Migration read capability confirms absence only.
 const fs = require('node:fs');
 const { createRequire } = require('node:module');
 const { randomUUID, createHash } = require('node:crypto');
-const sdk = createRequire('/app/package.json')('@aws-sdk/client-s3');
-const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } = sdk;
+let S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, HeadObjectCommand;
+function storageProbePolicy(owner = 'CRM_CHAT') {
+  const owners = { CRM_CHAT: 'messenger/', CRM_MAIL: 'mail/', SUPPORT: 'support/attachments/', IDENTITY_AVATAR: 'identity/avatars/' };
+  if (!owners[owner]) throw new Error('Unreviewed storage owner');
+  return { prefix: owners[owner], allowOwnList: ['CRM_CHAT', 'CRM_MAIL'].includes(owner), rootListDenied: true,
+    forbidden: [...Object.values(owners), 'database-backups/', 'chat/'].filter(prefix => prefix !== owners[owner]) };
+}
+module.exports = { storageProbePolicy, confirmStorageAbsence };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = code => { throw Object.assign(new Error(code), { safeCode: code }); };
 const status = error => error?.$metadata?.httpStatusCode;
@@ -11,10 +17,28 @@ const close = response => response?.Body?.destroy?.();
 let requests = 0;
 const started = Date.now();
 const cleanup = new Set();
-let client, bucket;
+let client, bucket, verificationClient;
 async function request(command, reserve = false) {
   if (++requests > 40 || Date.now() - started > (reserve ? 120000 : 100000)) fail('PROBE_UNAVAILABLE');
   return client.send(command, { abortSignal: AbortSignal.timeout(Math.min(10000, 120000 - (Date.now() - started))) });
+}
+async function confirmStorageAbsence(readObject, readHead) {
+  try { const response = await readObject(); close(response); fail('CLEANUP_UNCONFIRMED'); }
+  catch (error) {
+    if (status(error) === 404) return;
+    if (status(error) !== 403 || !readHead) throw error;
+    try { await readHead(); fail('CLEANUP_UNCONFIRMED'); }
+    catch (verificationError) { if (status(verificationError) !== 404) throw verificationError; }
+  }
+}
+async function confirmAbsent(key, reserve = false) {
+  // Without unconditional ListBucket, a missing key can return 403. The migration client uses only HEAD.
+  return confirmStorageAbsence(() => request(new GetObjectCommand({ Bucket: bucket, Key: key }), reserve),
+    verificationClient ? () => {
+      if (++requests > 40 || Date.now() - started > 120000) fail('PROBE_UNAVAILABLE');
+      return verificationClient.send(new HeadObjectCommand({ Bucket: bucket, Key: key }),
+        { abortSignal: AbortSignal.timeout(Math.min(10000, 120000 - (Date.now() - started))) });
+    } : null);
 }
 async function denied(command, ownPutKey) {
   try {
@@ -28,16 +52,30 @@ async function denied(command, ownPutKey) {
     fail(status(error) ? 'SCOPE_VIOLATION' : 'PROBE_UNAVAILABLE');
   }
 }
-(async () => {
+if (require.main === module) (async () => {
+  ({ S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, HeadObjectCommand } = createRequire('/app/package.json')('@aws-sdk/client-s3'));
   let result = 'PROBE_UNAVAILABLE';
   let objectHash;
   try {
-    const values = JSON.parse(fs.readFileSync('/reviewed/chat-env.json', 'utf8'));
+    let values = JSON.parse(fs.readFileSync('/reviewed/chat-env.json', 'utf8'));
+    const owner = process.env.STORAGE_OWNER || 'CRM_CHAT';
+    const policy = storageProbePolicy(owner);
+    const prefix = policy.prefix;
+    values = Object.fromEntries(['ENDPOINT', 'REGION', 'BUCKET', 'ACCESS_KEY_ID', 'SECRET_ACCESS_KEY', 'FORCE_PATH_STYLE'].map(field =>
+      [`CRM_CHAT_S3_${field}`, values[`${owner}_S3_${field}`]]));
+    if (values.CRM_CHAT_S3_BUCKET !== 'content-files') fail('SCOPE_VIOLATION');
     bucket = values.CRM_CHAT_S3_BUCKET;
     client = new S3Client({ endpoint: values.CRM_CHAT_S3_ENDPOINT, region: values.CRM_CHAT_S3_REGION,
       forcePathStyle: values.CRM_CHAT_S3_FORCE_PATH_STYLE === 'true', maxAttempts: 1,
       credentials: { accessKeyId: values.CRM_CHAT_S3_ACCESS_KEY_ID, secretAccessKey: values.CRM_CHAT_S3_SECRET_ACCESS_KEY } });
-    const key = `chat/${randomUUID()}/${randomUUID()}/${randomUUID()}`;
+    if (fs.existsSync('/reviewed/source-storage.json')) {
+      const sourceConfig = JSON.parse(fs.readFileSync('/reviewed/source-storage.json'));
+      if (sourceConfig.endpoint !== values.CRM_CHAT_S3_ENDPOINT || sourceConfig.region !== values.CRM_CHAT_S3_REGION ||
+          String(sourceConfig.forcePathStyle) !== values.CRM_CHAT_S3_FORCE_PATH_STYLE ||
+          sourceConfig.credentials.accessKeyId === values.CRM_CHAT_S3_ACCESS_KEY_ID) fail('SCOPE_VIOLATION');
+      verificationClient = new S3Client({ ...sourceConfig, maxAttempts: 1 });
+    }
+    const key = `${prefix}${randomUUID()}/${randomUUID()}/${randomUUID()}`;
     const bytes = Buffer.from(`aerocrm-chat-probe-${randomUUID()}`);
     objectHash = hash(bytes);
     // Track before PUT: a lost successful response still requires cleanup.
@@ -55,8 +93,10 @@ async function denied(command, ownPutKey) {
       }
     } finally { clearTimeout(readTimer); close(received); }
     if (hash(Buffer.concat(chunks)) !== objectHash) fail('INTEGRITY_FAILED');
-    const listed = await request(new ListObjectsV2Command({ Bucket: bucket, Prefix: key, MaxKeys: 1 }));
-    if (listed.Contents?.length !== 1 || listed.Contents[0].Key !== key) fail('INTEGRITY_FAILED');
+    if (policy.allowOwnList) {
+      const listed = await request(new ListObjectsV2Command({ Bucket: bucket, Prefix: key, MaxKeys: 1 }));
+      if (listed.Contents?.length !== 1 || listed.Contents[0].Key !== key) fail('INTEGRITY_FAILED');
+    } else await denied(new ListObjectsV2Command({ Bucket: bucket, Prefix: key, MaxKeys: 1 }));
     const url = new URL(values.CRM_CHAT_S3_ENDPOINT);
     url.pathname = `${url.pathname.replace(/\/$/, '')}/${values.CRM_CHAT_S3_FORCE_PATH_STYLE === 'true' ? `${encodeURIComponent(bucket)}/` : ''}${key.split('/').map(encodeURIComponent).join('/')}`;
     if (values.CRM_CHAT_S3_FORCE_PATH_STYLE !== 'true') url.hostname = `${bucket}.${url.hostname}`;
@@ -65,11 +105,11 @@ async function denied(command, ownPutKey) {
     await anonymous.body?.cancel();
     if (anonymous.status !== 403) fail(anonymous.status === 200 ? 'PUBLIC_OBJECT' : 'PROBE_UNAVAILABLE');
     await request(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-    try { const response = await request(new GetObjectCommand({ Bucket: bucket, Key: key })); close(response); fail('CLEANUP_UNCONFIRMED'); }
-    catch (error) { if (status(error) !== 404) throw error; }
+    await confirmAbsent(key);
     cleanup.delete(key);
-    for (const prefix of ['mail/', 'database-backups/', 'support/attachments/', 'identity/avatars/']) {
-      const foreign = `${prefix}aerocrm-probe-${randomUUID()}/${randomUUID()}`;
+    await denied(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));
+    for (const forbidden of policy.forbidden) {
+      const foreign = `${forbidden}aerocrm-probe-${randomUUID()}/${randomUUID()}`;
       await denied(new GetObjectCommand({ Bucket: bucket, Key: foreign }));
       // Track potentially accepted/lost PUT responses, without touching existing objects.
       cleanup.add(foreign);
@@ -87,11 +127,10 @@ async function denied(command, ownPutKey) {
     for (const key of cleanup) {
       try {
         await request(new DeleteObjectCommand({ Bucket: bucket, Key: key }), true);
-        try { const response = await request(new GetObjectCommand({ Bucket: bucket, Key: key }), true); close(response); fail('CLEANUP_UNCONFIRMED'); }
-        catch (error) { if (status(error) !== 404) throw error; }
+        await confirmAbsent(key, true);
       } catch { result = 'CLEANUP_UNCONFIRMED'; }
     }
-    client?.destroy();
+    client?.destroy(); verificationClient?.destroy();
   }
   process.stdout.write(`${JSON.stringify({ code: result, ok: result === 'PASS', ...(objectHash ? { objectHash } : {}) })}\n`);
   process.exitCode = result === 'PASS' ? 0 : 1;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 
 function fixture({ failAt = null, rollbackFails = false, compatibilityRequiresRollback = false,
-  validatePreviousFails = false } = {}) {
+  validatePreviousFails = false, forwardOnly = false } = {}) {
   const calls = [];
   let committed = false;
   const action = name => () => {
@@ -30,6 +30,7 @@ function fixture({ failAt = null, rollbackFails = false, compatibilityRequiresRo
     clearPending: action('clearPending'), report: action('report'), isCommitted: () => committed,
     validatePrevious,
     rollback: () => { calls.push('rollback'); if (rollbackFails) throw new Error('rollback guard failure'); },
+    forwardOnly: () => forwardOnly,
     blockRollback: action('blockRollback'), startWriters: action('startWriters')
   } };
 }
@@ -92,4 +93,15 @@ test('failed rollback compatibility guard blocks rollback and preserves the pend
   assert.equal(runReleaseTransaction(actions).status, 'rollback-blocked');
   assert(calls.includes('blockRollback'));
   assert(!calls.includes('clearPending'));
+});
+
+test('forward-only storage journal blocks every previous-state recovery path', () => {
+  for (const failAt of ['migrate', 'compatibility', 'applyConfiguration', 'switchImages', 'validateTarget']) {
+    const { actions, calls } = fixture({ failAt, forwardOnly: true });
+    assert.equal(runReleaseTransaction(actions, { migrationRequested: failAt === 'migrate' }).status, 'fix-forward-required', failAt);
+    assert(calls.includes('blockRollback'), failAt);
+    assert(!calls.includes('rollback'), failAt);
+    assert(!calls.includes('validatePrevious'), failAt);
+    assert(!calls.includes('clearPending'), failAt);
+  }
 });

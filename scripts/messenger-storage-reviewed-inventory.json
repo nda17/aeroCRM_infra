@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "crm-access": {
+      "migration": "20261008010000_messenger_storage_prefix",
+      "migrations": {
+        "20260920000000_init_aerocrm": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14",
+        "20260921020000_add_crm_custom_member_role": "2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514",
+        "20260921020100_crm_custom_roles": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876",
+        "20260921030100_crm_admin_seat_capacity": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d",
+        "20260923030000_workspace_closure": "bf58555641fe010e897ae2d4af2152fa4078c6a86a3fded7c502c1c5476c9cc6",
+        "20261005010000_crm_saved_views": "25eae1ded34a19affaa4a6286f38175c58dc50d214e842c1a5adf6321b885cb1",
+        "20261005020000_workspace_collaboration": "d3146d671018b306f321f259141eda26d9efed3676ded38c2f044cb35c112778",
+        "20261007010000_chat_attachments": "20fd09e316cc877c0b2424be269f4fe7ca56e1b8996bc083bd631087d88eb019",
+        "20261008010000_messenger_storage_prefix": "394f86ac5af5c20c2d6df6d84ac9220e7f40bc73af18e5b0d5781cb9285ef039"
+      },
+      "aclSha256": "5b6fd981cd56e46e294842582bb30d4800d93cd667edacd9e5cc790a94c47898",
+      "tables": [
+        "_prisma_migrations",
+        "crm_admissions",
+        "crm_billing_capacity",
+        "crm_billing_operations",
+        "crm_chat_attachments",
+        "crm_chat_conversations",
+        "crm_chat_messages",
+        "crm_chat_participants",
+        "crm_custom_roles",
+        "crm_directory_entries",
+        "crm_employee_profiles",
+        "crm_invitation_intents",
+        "crm_member_teams",
+        "crm_saved_views",
+        "crm_team_audit",
+        "crm_team_command_receipts",
+        "crm_team_deliveries",
+        "crm_team_outbox",
+        "crm_teams",
+        "crm_workspace_access",
+        "crm_workspace_branding",
+        "crm_workspace_closures",
+        "crm_workspace_members",
+        "service_identity",
+        "workspace_closure_fences"
+      ],
+      "sequences": {
+        "crm_admissions_position_seq": [
+          "SELECT",
+          "USAGE"
+        ]
+      },
+      "types": [
+        "CrmAccessLifecycle",
+        "CrmMemberRole"
+      ],
+      "routines": [
+        "assert_workspace_open",
+        "enforce_service_identity_integrity",
+        "enforce_workspace_closure_fence",
+        "enforce_workspace_closure_operation",
+        "guard_billing_capacity",
+        "guard_billing_operation",
+        "guard_chat_attachment",
+        "guard_workspace_business",
+        "guard_workspace_intent",
+        "is_valid_custom_role_permissions",
+        "provision_workspace_collaboration",
+        "reject_team_history_mutation",
+        "signal_workspace_collaboration"
+      ],
+      "routineExecute": [
+        "assert_workspace_open(uuid)",
+        "is_valid_custom_role_permissions(text[])"
+      ],
+      "immutableRoutine": {
+        "name": "guard_chat_attachment",
+        "bodyMd5": "c09fadbf907cf77e227c783313f8722f"
+      }
+    }
+  }
+}
