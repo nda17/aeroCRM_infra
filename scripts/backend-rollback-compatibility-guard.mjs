@@ -29,6 +29,7 @@ const mailInventory = JSON.parse(fs.readFileSync(new URL('./crm-corporate-mail-r
 const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-reviewed-inventory.json', import.meta.url)));
 const importMigration = '20261001000000_crm_file_imports';
 const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-customization-reviewed-inventory.json', import.meta.url)));
+const meeting3Inventory = JSON.parse(fs.readFileSync(new URL('./meeting3-reviewed-inventory.json', import.meta.url)));
 const collaborationInventory = JSON.parse(fs.readFileSync(new URL('./workspace-collaboration-reviewed-inventory.json', import.meta.url)));
 const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
@@ -68,6 +69,7 @@ function closureImageReviewed(service, sha, execute = run) {
     : service === 'crm-sales' ? [expected, importInventory.owners['crm-sales'], plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales']]
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
+  if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -352,17 +354,37 @@ assert(Object.values(plannerCapabilities).every(value => typeof value === 'boole
 const uxCapabilities = Object.fromEntries(Object.entries(uxInventory.owners).map(([service, entry]) => [service,
   imageCapabilities(candidateImage(service), [entry.migration], { [entry.migration]: entry.migrations[entry.migration] })[0]]));
 assert(Object.values(uxCapabilities).every(value => typeof value === 'boolean'), 'Invalid CRM UX image compatibility inventory');
+const meeting3Capabilities = Object.fromEntries(Object.entries(meeting3Inventory.owners).map(([service, entry]) => [service,
+  imageCapabilities(candidateImage(service), [entry.migration], { [entry.migration]: entry.migrations[entry.migration] })[0]]));
+assert(Object.values(meeting3Capabilities).every(value => typeof value === 'boolean'), 'Invalid meeting 3 image compatibility inventory');
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&
     mailWorkspaceCapabilities[0] && Object.values(importCapabilities).every(Boolean) &&
-    Object.values(plannerCapabilities).every(Boolean) && Object.values(uxCapabilities).every(Boolean)) {
+    Object.values(plannerCapabilities).every(Boolean) && Object.values(uxCapabilities).every(Boolean) && Object.values(meeting3Capabilities).every(Boolean)) {
   console.log('Candidate backend images support persisted CRM contracts');
   process.exit(0);
 }
 if (!writersStopped) {
   console.error('Candidate backend images require a stopped-writer data compatibility check');
   process.exit(2);
+}
+
+for (const [service, entry] of Object.entries(meeting3Inventory.owners)) if (!meeting3Capabilities[service]) {
+  const schema = service.replace('-', '_');
+  const identity = readDatabaseUrl(`/opt/aerocrm/env/migrations/${service}.env`, `${schema.toUpperCase()}_DATABASE_URL`, {
+    database: `aerocrm_${schema}`, role: `aerocrm_${schema}_migration`, schema
+  });
+  const applied = inspectDatabase(identity, `SELECT EXISTS (SELECT 1 FROM ${schema}._prisma_migrations
+    WHERE migration_name='${entry.migration}' AND checksum='${entry.migrations[entry.migration]}'
+      AND finished_at IS NOT NULL AND rolled_back_at IS NULL)::text;`);
+  if (applied) {
+    const query = service === 'crm-access' ? 'SELECT EXISTS (SELECT 1 FROM crm_access.crm_chat_attachments)::text;'
+      : service === 'crm-intake' ? 'SELECT EXISTS (SELECT 1 FROM crm_intake.mail_intake_sources)::text;'
+      : "SELECT EXISTS (SELECT 1 FROM crm_sales.deal_timeline WHERE kind='ASSIGNEE_CHANGED')::text;";
+    assert.equal(inspectDatabase(identity, query), false,
+      `Candidate ${service} image cannot preserve persisted meeting 3 records`);
+  }
 }
 
 for (const [service, entry] of Object.entries(uxInventory.owners)) if (!uxCapabilities[service]) {

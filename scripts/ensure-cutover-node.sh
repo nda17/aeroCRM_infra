@@ -16,6 +16,7 @@ case "${1:-}" in
   --crm-corporate-mail) checked_scripts=(crm-corporate-mail-migration.mjs) ;;
   --crm-file-imports) checked_scripts=(crm-file-imports-migration.mjs) ;;
   --crm-planner-customization) checked_scripts=(crm-planner-customization-migration.mjs) ;;
+  --meeting3) checked_scripts=(meeting3-migration.mjs) ;;
   --workspace-collaboration) checked_scripts=(workspace-collaboration-migration.mjs) ;;
   --crm-ux-unification) checked_scripts=(crm-ux-unification-migration.mjs) ;;
   --crm-intake-notifications) checked_scripts=(crm-intake-notifications-migration.mjs) ;;

@@ -55,7 +55,9 @@ crm_ux_unification_migration=${22:-false}
 crm_ux_unification_migration_env_hash=${23:-}
 crm_workspace_collaboration_migration=${24:-false}
 crm_workspace_collaboration_migration_env_hash=${25:-}
-[[ $# -le 25 ]] || exit 64
+crm_meeting3_migration=${26:-false}
+crm_meeting3_migration_env_hash=${27:-}
+[[ $# -le 27 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -145,6 +147,17 @@ if [[ "$workspace_closure_identity_acl_repair" == true ]]; then
 else
   [[ -z "$workspace_closure_identity_env_hash" ]] || exit 64
 fi
+if [[ "$crm_meeting3_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_meeting3_migration_env_hash" =~ ^[a-f0-9]{64}$ &&
+    "$billing_capacity_migration" == false && "$crm_custom_roles_migration" == false &&
+    "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
+    "$crm_corporate_mail_migration" == false && "$crm_file_imports_migration" == false &&
+    "$crm_planner_customization_migration" == false && "$crm_ux_unification_migration" == false &&
+    "$crm_workspace_collaboration_migration" == false &&
+    "$workspace_closure_migration" == false && "$workspace_closure_identity_acl_repair" == false ]] || exit 64
+else
+  [[ "$crm_meeting3_migration" == false && -z "$crm_meeting3_migration_env_hash" ]] || exit 64
+fi
 # The staged backend controller acquires the shared lock before any configuration mutation.
 if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
   node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
@@ -169,6 +182,10 @@ if [[ "$crm_ux_unification_migration" == true ]]; then
 fi
 if [[ "$crm_workspace_collaboration_migration" == true ]]; then
   echo 'Workspace collaboration migration requires the full canonical backend manifest controller' >&2
+  exit 1
+fi
+if [[ "$crm_meeting3_migration" == true ]]; then
+  echo 'Meeting 3 migrations require the full canonical backend manifest controller' >&2
   exit 1
 fi
 if [[ "$role" == backend && -f /opt/aerocrm/releases/backend-state.json ]]; then

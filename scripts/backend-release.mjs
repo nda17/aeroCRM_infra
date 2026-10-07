@@ -12,6 +12,7 @@ import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateStat
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
+import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
 import { atomic, publishRabbitmqConfig, recoverRabbitmqConfig, validateRabbitmqContainer } from './backend-rabbitmq-config.mjs';
 
 const root = '/opt/aerocrm';
@@ -28,19 +29,20 @@ args.shift();
 const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
   commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
   closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = '',
-  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = ''] = args;
+  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = '', meeting3 = 'false', meeting3Hash = ''] = args;
 assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
 assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
 assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
 assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
-assert(args.length >= 3 && args.length <= 25, 'Invalid backend release argument count');
+assert(args.length >= 3 && args.length <= 27, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
-  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash]];
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash], [meeting3, meeting3Hash]];
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
 }
 assert.equal(billing, custom, 'Billing and custom-role hooks must be paired');
+if (meeting3 === 'true') assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration].every(value => value === 'false'), 'Meeting 3 cannot combine migration hooks');
 if (planner === 'true')
   assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, ux, collaboration].every(value => value === 'false'),
     'CRM planner customization cannot combine migration hooks');
@@ -68,7 +70,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -78,8 +80,18 @@ assert(['true', 'false'].includes(mailEnvInstall), 'Invalid Customers env instal
 assert(mailEnvInstall === 'true' ? /^[a-f0-9]{64}$/.test(mailEnvBeforeHash) &&
   /^[a-f0-9]{64}$/.test(mailEnvBundleHash) : !mailEnvBeforeHash && !mailEnvBundleHash,
   'Invalid reviewed Customers env hashes');
-assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair, fileImports, planner, ux, collaboration].every(value => value === 'false'),
+assert(mailEnvInstall !== 'true' || [billing, custom, commerce, intake, closureMigration, aclRepair, fileImports, planner, ux, collaboration, meeting3].every(value => value === 'false'),
   'Customers env installation cannot combine unrelated migration hooks');
+const chatEnvInstall = process.env.CRM_CHAT_ENV_INSTALL ?? 'false';
+const chatEnvBeforeHash = process.env.CRM_CHAT_ENV_BEFORE_HASH ?? '';
+const chatEnvBundleHash = process.env.CRM_CHAT_ENV_BUNDLE_HASH ?? '';
+assert(['true', 'false'].includes(chatEnvInstall), 'Invalid Chat env installation flag');
+assert(chatEnvInstall === 'true' ? /^[a-f0-9]{64}$/.test(chatEnvBeforeHash) && /^[a-f0-9]{64}$/.test(chatEnvBundleHash)
+  : !chatEnvBeforeHash && !chatEnvBundleHash, 'Invalid reviewed Chat env hashes');
+assert(chatEnvInstall !== 'true' || (meeting3 === 'true' && mailEnvInstall === 'false'),
+  'Chat installation requires the isolated meeting 3 release');
+const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true';
+const envBeforeHash = chatEnvInstall === 'true' ? chatEnvBeforeHash : mailEnvBeforeHash;
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
 fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
@@ -308,13 +320,25 @@ function compatibility(state) {
   }
 }
 function runMigrations() {
+  if (chatEnvInstall === 'true') {
+    const bundleFile = `${stagedRoot}/crm-access-chat-env.json`;
+    const stat = fs.lstatSync(bundleFile);
+    assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600 && stat.uid === process.getuid(),
+      'Private Chat probe configuration metadata mismatch');
+    validateChatBundle(fs.readFileSync(bundleFile), chatEnvBundleHash);
+    execute('Reviewed independent Chat storage scope probe', 'timeout', ['130s', 'docker', 'run', '--rm',
+      '--read-only', '--user', '0:0', '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
+      '--mount', `type=bind,src=${bundleFile},dst=/reviewed/chat-env.json,readonly`,
+      '--mount', `type=bind,src=${stagedRoot}/scripts/chat-storage-probe.cjs,dst=/reviewed/chat-storage-probe.cjs,readonly`,
+      '--entrypoint', 'node', `aerocrm/crm-access:${sha}`, '/reviewed/chat-storage-probe.cjs']);
+  }
   const hooks = [['billing-capacity-migration.mjs', billing, billingHash],
     ['crm-custom-roles-migration.mjs', custom, customHash], ['crm-sales-commerce-migration.mjs', commerce, commerceHash],
     ['crm-intake-notifications-migration.mjs', intake, intakeHash], ['workspace-closure-migration.mjs', closureMigration, closureHash], ['crm-corporate-mail-migration.mjs', mail, mailHash],
     ['crm-file-imports-migration.mjs', fileImports, fileImportsHash],
     ['crm-planner-customization-migration.mjs', planner, plannerHash],
     ['crm-ux-unification-migration.mjs', ux, uxHash],
-    ['workspace-collaboration-migration.mjs', collaboration, collaborationHash]];
+    ['workspace-collaboration-migration.mjs', collaboration, collaborationHash], ['meeting3-migration.mjs', meeting3, meeting3Hash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
@@ -356,7 +380,7 @@ if (pending) {
 if (!pending) {
   validateEnv(`${root}/env/backend`);
   const liveHash = envHash(`${root}/env/backend`);
-  assert(mailEnvInstall === 'true' ? liveHash === mailEnvBeforeHash ||
+  assert(envInstall ? liveHash === envBeforeHash ||
     (canonical?.manifest.releaseSha === sha && liveHash === expectedEnvHash && canonical.envHash === expectedEnvHash) :
     liveHash === expectedEnvHash, 'Active backend env hash mismatch');
 }
@@ -370,19 +394,22 @@ const target = validateState({ schemaVersion: 1, manifest, infraSha: process.env
     schemaAnchorSha: closureMigration === 'true' ? sha : previous.closure.schemaAnchorSha } });
 assert(closureMigration !== 'true' || !target.closure.enabled, 'Closure schema migration requires gate OFF');
 assert(aclRepair !== 'true' || target.closure.enabled, 'Identity ACL repair requires closure gate ON');
-if (mailEnvInstall === 'true') {
+if (envInstall) {
   // Build the candidate from the immutable previous snapshot, never from a
   // potentially half-applied live directory during pending recovery.
   let sourceState = previous;
-  if (!pending && mailEnvBeforeHash !== expectedEnvHash && canonical?.envHash === expectedEnvHash && canonical.manifest.releaseSha === sha) {
+  if (!pending && envBeforeHash !== expectedEnvHash && canonical?.envHash === expectedEnvHash && canonical.manifest.releaseSha === sha) {
     assert(fs.existsSync(previousFile), 'Committed Customers env retry requires its previous snapshot');
     sourceState = validateState(JSON.parse(fs.readFileSync(previousFile, 'utf8')));
   }
   validateSnapshot(sourceState);
-  assert.equal(sourceState.envHash, mailEnvBeforeHash, 'Reviewed Customers before env hash mismatch');
-  const candidate = `${stagedRoot}/mail-env-candidate-${randomUUID()}`;
+  assert.equal(sourceState.envHash, envBeforeHash, 'Reviewed Customers before env hash mismatch');
+  const candidate = `${stagedRoot}/private-env-candidate-${randomUUID()}`;
   try {
-    stageMailEnvironment({ bundleFile: `${stagedRoot}/crm-customers-mail-env.json`,
+    if (chatEnvInstall === 'true') stageChatEnvironment({ bundleFile: `${stagedRoot}/crm-access-chat-env.json`,
+      bundleHash: chatEnvBundleHash, sourceDirectory: `${configDirectory(sourceState)}/env/backend`,
+      candidateDirectory: candidate });
+    else stageMailEnvironment({ bundleFile: `${stagedRoot}/crm-customers-mail-env.json`,
       bundleHash: mailEnvBundleHash, sourceDirectory: `${configDirectory(sourceState)}/env/backend`,
       candidateDirectory: candidate });
     validateEnv(candidate);
