@@ -11,6 +11,8 @@ import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateStat
   imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig, reviewedStoragePendingAmendment } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
+import { storageCopyOriginInfra, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
+  validateCommittedStorageRecovery } from './backend-storage-prisma-recovery.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
 import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences, privateStorageUser } from './backend-runtime-storage-env.mjs';
@@ -103,6 +105,7 @@ assert(storageInstall ? [storageBeforeHash, storageBundleHash, storageManifestHa
 assert(!storageInstall || (meeting3 === 'true' && mailEnvInstall === 'false' && chatEnvInstall === 'false' && uniformManifest(manifest)),
   'Runtime storage requires the isolated full-manifest meeting 3 controller');
 const storageMarker = `${releases}/runtime-storage-forward.json`;
+const storageRecoveryFile = `${releases}/runtime-storage-prisma-recovery.json`;
 const storageBundleFile = `${stagedRoot}/runtime-storage-env.json`;
 const storageManifestFile = `${stagedRoot}/storage-manifest.json`;
 const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true' || storageInstall;
@@ -365,6 +368,26 @@ function storageDatabase(service, sql) {
     '-h', '127.0.0.1', '-p', '5432', '-U', principal, '-d', `aerocrm_${schema}`, '-c', `BEGIN READ ONLY; SET LOCAL TIME ZONE 'UTC'; ${sql} COMMIT;`],
     { env: { ...process.env, PGPASSWORD: decodeURIComponent(url.password) } }));
 }
+function messengerRecoveryProof() {
+  const state = storageDatabase('crm-access', `SELECT json_build_object(
+    'canTemp',has_database_privilege(current_user,current_database(),'TEMP'),
+    'attachmentsEmpty',NOT EXISTS(SELECT 1 FROM crm_access.crm_chat_attachments),
+    'uploadReceiptsEmpty',NOT EXISTS(SELECT 1 FROM crm_access.crm_team_command_receipts WHERE command_type='chat.upload'),
+    'checks',(SELECT json_agg(json_build_object('validated',c.convalidated,'noInherit',c.connoinherit,'definition',pg_get_constraintdef(c.oid)))
+      FROM pg_constraint c WHERE c.conrelid='crm_access.crm_chat_attachments'::regclass AND c.contype='c'
+      AND (SELECT attnum FROM pg_attribute WHERE attrelid=c.conrelid AND attname='private_object_key' AND NOT attisdropped)=ANY(c.conkey)),
+    'rows',(SELECT json_agg(json_build_object('id',id,'migration_name',migration_name,'checksum',checksum,
+      'started_at_utc',to_char(started_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'finished_at_utc',CASE WHEN finished_at IS NULL THEN NULL ELSE to_char(finished_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+      'rolled_back_at_utc',CASE WHEN rolled_back_at IS NULL THEN NULL ELSE to_char(rolled_back_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+      'applied_steps_count',applied_steps_count,'logs_null',logs IS NULL)) FROM crm_access._prisma_migrations
+      WHERE migration_name='20261008010000_messenger_storage_prefix'))::text;`);
+  assert.equal(state.rows?.length, 1, 'Initial storage recovery requires the one audited failed attempt');
+  assert.equal(state.checks?.length, 1, 'Initial storage recovery requires the sole legacy key CHECK');
+  return { attempt: state.rows[0], attachmentsEmpty: state.attachmentsEmpty, uploadReceiptsEmpty: state.uploadReceiptsEmpty,
+    keyDefinitionHash: digest(state.checks[0].definition), keyValidated: state.checks[0].validated,
+    keyNoInherit: state.checks[0].noInherit, canTemp: state.canTemp };
+}
 function verifyStorageReferences(objects) {
   const mail = storageDatabase('crm-customers', `SELECT COALESCE(json_agg(row),'[]'::json)::text FROM (
     SELECT json_build_array('mail','attachment',private_object_key,state,sha256,byte_size,
@@ -407,10 +430,21 @@ function verifyStorageReferences(objects) {
     'mediaEmpty',NOT EXISTS(SELECT 1 FROM identity.avatar_media_objects))::text;`);
   validateFrozenAvatarReferences(identity);
 }
-function storageInputs() {
+function storageInputs(originOverride = null) {
   const values = validateRuntimeStorageBundle(privateBytes(storageBundleFile), storageBundleHash);
   const objects = validateStorageManifest(privateBytes(storageManifestFile), storageManifestHash);
-  const tuple = { schemaVersion: 1, releaseSha: sha, infraSha: process.env.INFRA_SHA,
+  let copyInfra = process.env.INFRA_SHA;
+  if (fs.existsSync(storageRecoveryFile)) {
+    const recovery = validateCommittedRecoveryReceipt(JSON.parse(privateBytes(storageRecoveryFile)));
+    assert.equal(recovery.target.infraSha, process.env.INFRA_SHA, 'Storage recovery requires the reviewed infra');
+    assert.deepEqual(recovery.target, target);
+    assert(stateKey(previous) === stateKey(recovery.pending.previous) || stateKey(previous) === stateKey(recovery.target),
+      'Storage recovery previous state must be its original or committed target');
+    copyInfra = recovery.marker.infraSha;
+  } else if (originOverride !== null) {
+    assert.equal(originOverride, storageCopyOriginInfra); copyInfra = originOverride;
+  }
+  const tuple = { schemaVersion: 1, releaseSha: sha, infraSha: copyInfra,
     beforeEnvHash: storageBeforeHash, afterEnvHash: expectedEnvHash, bundleHash: storageBundleHash,
     manifestHash: storageManifestHash, targetBucket: 'content-files', provider: objects.provider,
     principals: Object.fromEntries(Object.keys(storageOwners).map(owner => [owner,
@@ -600,8 +634,32 @@ if (envInstall) {
 } else snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
 rolesForPlan(expectedEffectivePlan(target), true);
 if (pending && stateKey(pending.target) !== stateKey(target)) {
-  assert(storageInstall && !fs.existsSync(storageMarker), 'Pending provenance recovery requires pre-marker storage installation');
+  assert(storageInstall, 'Pending provenance recovery requires storage installation');
   verifyRuntime(previous, null, true);
+  if (fs.existsSync(storageMarker)) {
+    const writersStopped = !runtime().some(c => c.running && Object.values(storageOwners).flat().map(name=>name.slice(0,-4)).includes(c.role));
+    assert(writersStopped, 'Committed storage recovery requires stopped writers');
+    const pendingHash = digest(originalPendingBytes);
+    if (!fs.existsSync(storageRecoveryFile)) {
+      const markerBytes = privateBytes(storageMarker);
+      const marker = JSON.parse(markerBytes);
+      storageInputs(storageCopyOriginInfra); storageCopy('verify');
+      const proof = { pending, canonical, target, marker, storageBeforeHash,
+        liveEnvHash: envHash(`${root}/env/backend`), liveComposeHash: composeHash(`${root}/compose`),
+        runtimeVerified: true, writersStopped, destinationVerified: true, migrationProof: messengerRecoveryProof() };
+      validateCommittedStorageRecovery(proof);
+      assert.equal(digest(privateBytes(pendingFile)), pendingHash, 'Original pending changed during committed recovery');
+      assert.equal(digest(privateBytes(storageMarker)), digest(markerBytes), 'Copy marker changed during committed recovery');
+      writeJson(storageRecoveryFile, makeCommittedRecoveryReceipt({ ...proof, pendingBytes: originalPendingBytes, markerBytes }));
+    }
+    const recovery = validateCommittedRecoveryReceipt(JSON.parse(privateBytes(storageRecoveryFile)));
+    assert.deepEqual(recovery.pending, pending); assert.deepEqual(recovery.target, target);
+    assert.deepEqual(canonical, previous); assert.equal(envHash(`${root}/env/backend`), previous.envHash);
+    assert.equal(composeHash(`${root}/compose`), previous.composeHash);
+    storageInputs(); storageCopy('verify');
+    assert.equal(digest(privateBytes(pendingFile)), pendingHash, 'Pending changed before committed recovery amendment');
+    writeJson(pendingFile, { ...pending, target }); pending = { ...pending, target };
+  } else {
   const chatMigrationAbsent = storageDatabase('crm-access', `SELECT json_build_object('absent', NOT EXISTS (
     SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='20261008010000_messenger_storage_prefix'))::text;`).absent;
   const amended = reviewedStoragePendingAmendment({ pending, canonical, target, storageInstall, storageBeforeHash,
@@ -620,6 +678,7 @@ if (pending && stateKey(pending.target) !== stateKey(target)) {
   assert.equal(digest(privateBytes(pendingFile)), originalHash, 'Pending journal changed during recovery');
   writeJson(pendingFile, amended);
   pending = amended;
+  }
 }
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 recoverRabbitmq(previous, pending ? target : null);

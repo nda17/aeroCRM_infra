@@ -4,6 +4,10 @@ import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateStat
   compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig,
   reviewedStoragePendingAmendment }
   from './backend-release-state.mjs';
+import { auditedMessengerAttempt, isAuditedMessengerAttempt, auditedMessengerAttemptSql,
+  validateCommittedStorageRecovery, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
+  messengerTempSql, withMessengerTemp, messengerRecoveryHistory, storageCopyOriginInfra }
+  from './backend-storage-prisma-recovery.mjs';
 
 const sha = char => char.repeat(40);
 const hash = char => char.repeat(64);
@@ -46,6 +50,30 @@ function storageRecoveryFixture() {
     storageBeforeHash: previous.envHash, liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
     markerPresent: false, chatMigrationAbsent: true, runtimeVerified: true };
   return { previous, target, pending, canonical, nextTarget, args };
+}
+
+function committedStorageRecoveryFixture() {
+  const previous = { ...state(sha('a'), '101'), infraSha: storageCopyOriginInfra };
+  const target = { ...state('d3a2e8d525778f2216f8bfbcedb08dd1e56bbd0c', '303'), infraSha: storageCopyOriginInfra };
+  const pending = { schemaVersion: 1, target, previous, phase: 'switching' };
+  const nextTarget = { ...target, infraSha: sha('9') };
+  const canonical = structuredClone(previous);
+  const marker = { schemaVersion: 1, infraSha: storageCopyOriginInfra, phase: 'forward-committed',
+    releaseSha: target.manifest.releaseSha, beforeEnvHash: previous.envHash, afterEnvHash: target.envHash,
+    bundleHash: hash('b'), manifestHash: hash('c'), targetBucket: 'content-files',
+    provider: { endpoint: 'https://s3.twcstorage.ru', region: 'ru-1', forcePathStyle: true },
+    principals: { CRM_MAIL: hash('1'), SUPPORT: hash('2'), IDENTITY_AVATAR: hash('3'), CRM_CHAT: hash('4') },
+    sourceMailCleaned: false, supportDeleteReady: false };
+  const failedAttempt = { ...auditedMessengerAttempt, rolled_back_at_utc: null };
+  const migrationProof = { attempt: failedAttempt, attachmentsEmpty: true, uploadReceiptsEmpty: true,
+    keyDefinitionHash: 'b9bffbc5b27a8529aa74bdc2049ab6484cf5b53611b52beac718f1104a1b9afa',
+    keyValidated: true, keyNoInherit: false, canTemp: false };
+  const args = { pending, canonical, target: nextTarget, marker,
+    storageBeforeHash: previous.envHash, liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
+    runtimeVerified: true, writersStopped: true, destinationVerified: true, migrationProof };
+  const pendingBytes = Buffer.from(JSON.stringify(pending));
+  const markerBytes = Buffer.from(JSON.stringify(marker));
+  return { previous, target, nextTarget, pending, canonical, marker, migrationProof, args, pendingBytes, markerBytes };
 }
 
 function effectiveConfigFixture() {
@@ -168,6 +196,97 @@ test('reviewed storage recovery rejects marker, migration/DDL, applied target, a
     mutate(args);
     assert.throws(() => reviewedStoragePendingAmendment(args));
   }
+});
+
+test('Prisma history resolves only the exact reviewed failed row and requires completed immutable history', () => {
+  const unresolved = { ...auditedMessengerAttempt, rolled_back_at_utc: null };
+  const resolved = { ...unresolved, rolled_back_at_utc: '2026-10-08T00:40:01.000000Z' };
+  const completed = { ...unresolved, id: '716e4c95-9415-4c5e-a998-1b390647a3df',
+    finished_at_utc: '2026-10-08T00:40:02.000000Z', applied_steps_count: 1 };
+  assert.equal(isAuditedMessengerAttempt(unresolved, false), true);
+  assert.equal(isAuditedMessengerAttempt(resolved), true);
+  assert.equal(isAuditedMessengerAttempt({ ...resolved, checksum: sha('a') }), false);
+  assert.equal(isAuditedMessengerAttempt({ ...resolved, id: 'another-attempt' }), false);
+  assert.match(auditedMessengerAttemptSql(), /16e78d55-ffb4-44e7-a329-2686cb1afe40/);
+  assert.match(auditedMessengerAttemptSql(), /applied_steps_count=0/);
+  assert.throws(() => auditedMessengerAttemptSql('m;DROP'));
+  assert.deepEqual(messengerRecoveryHistory([unresolved]), { needsResolve: true, completed: false });
+  assert.deepEqual(messengerRecoveryHistory([resolved]), { needsResolve: false, completed: false });
+  assert.deepEqual(messengerRecoveryHistory([resolved, completed]), { needsResolve: false, completed: true });
+  for (const rows of [
+    [{ ...unresolved, checksum: sha('a') }],
+    [{ ...unresolved, applied_steps_count: 1 }],
+    [{ ...unresolved, logs_null: false }],
+    [resolved, { ...completed, finished_at_utc: null }],
+    [resolved, { ...completed, rolled_back_at_utc: '2026-10-08T00:40:02.000000Z' }],
+    [resolved, { ...completed, checksum: sha('b') }],
+    [resolved, completed, completed],
+  ]) assert.throws(() => messengerRecoveryHistory(rows));
+});
+
+test('committed Prisma recovery keeps the original marker and changes only infra provenance', () => {
+  const fixture = committedStorageRecoveryFixture();
+  const amended = validateCommittedStorageRecovery(fixture.args);
+  assert.deepEqual(amended, { ...fixture.pending, target: fixture.nextTarget });
+  assert.deepEqual(amended.target.manifest, fixture.pending.target.manifest);
+  assert.equal(amended.target.envHash, fixture.pending.target.envHash);
+  assert.equal(amended.target.composeHash, fixture.pending.target.composeHash);
+  assert.equal(fixture.marker.infraSha, storageCopyOriginInfra);
+  assert.equal(fixture.marker.phase, 'forward-committed');
+  const receipt = makeCommittedRecoveryReceipt({ ...fixture.args,
+    pendingBytes: fixture.pendingBytes, markerBytes: fixture.markerBytes });
+  assert.deepEqual(validateCommittedRecoveryReceipt(receipt).marker, fixture.marker);
+  const tampered = { ...receipt, markerBase64: Buffer.from(JSON.stringify({ ...fixture.marker, phase: 'copying' })).toString('base64') };
+  assert.throws(() => validateCommittedRecoveryReceipt(tampered));
+  const principalTamper = { ...receipt, markerBase64: Buffer.from(JSON.stringify({
+    ...fixture.marker, principals: { ...fixture.marker.principals, SUPPORT: hash('5') }
+  })).toString('base64') };
+  assert.throws(() => validateCommittedRecoveryReceipt(principalTamper));
+  for (const [index, mutate] of [
+    args => { args.marker = { ...args.marker, phase: 'verified' }; },
+    args => { args.marker = { ...args.marker, infraSha: sha('8') }; },
+    args => { args.marker = { ...args.marker, beforeEnvHash: hash('8') }; },
+    args => { args.marker = { ...args.marker, afterEnvHash: hash('8') }; },
+    args => { args.marker = { ...args.marker, sourceMailCleaned: true }; },
+    args => { args.marker = { ...args.marker, targetBucket: 'backup-services' }; },
+    args => { args.marker = { ...args.marker, provider: { ...args.marker.provider, region: 'other' } }; },
+    args => { args.target = { ...args.target, envHash: hash('8') }; },
+    args => { args.target = { ...args.target, composeHash: hash('8') }; },
+    args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '808' }) }; },
+    args => { args.migrationProof = { ...args.migrationProof, attempt: { ...args.migrationProof.attempt, id: 'other' } }; },
+    args => { args.migrationProof = { ...args.migrationProof, canTemp: true }; },
+  ].entries()) {
+    const args = structuredClone(fixture.args);
+    mutate(args);
+    assert.throws(() => validateCommittedStorageRecovery(args), `accepted committed recovery drift fixture ${index}`);
+  }
+});
+
+test('temporary migration privilege is database and role scoped and is revoked after success or failure', () => {
+  assert.equal(messengerTempSql(true), 'GRANT TEMPORARY ON DATABASE aerocrm_crm_access TO aerocrm_crm_access_migration;');
+  assert.equal(messengerTempSql(false), 'REVOKE TEMPORARY ON DATABASE aerocrm_crm_access FROM aerocrm_crm_access_migration;');
+  const order = [];
+  assert.equal(withMessengerTemp({ grant: () => order.push('grant'), run: () => { order.push('run'); return 'ok'; },
+    revoke: () => order.push('revoke'), verifyRevoked: () => order.push('verify') }), 'ok');
+  assert.deepEqual(order, ['grant', 'run', 'revoke', 'verify']);
+  order.length = 0;
+  assert.throws(() => withMessengerTemp({ grant: () => { order.push('grant'); throw new Error('grant failed'); },
+    run: () => { order.push('run'); }, revoke: () => order.push('revoke'), verifyRevoked: () => order.push('verify') }), /grant failed/);
+  assert.deepEqual(order, ['grant', 'revoke', 'verify'], 'failed grant must never run the migration');
+  for (const failedCleanup of ['revoke', 'verify']) {
+    order.length = 0;
+    assert.throws(() => withMessengerTemp({ grant: () => order.push('grant'), run: () => { order.push('run'); return 'ok'; },
+      revoke: () => { order.push('revoke'); if (failedCleanup === 'revoke') throw new Error('revoke failed'); },
+      verifyRevoked: () => { order.push('verify'); if (failedCleanup === 'verify') throw new Error('verify failed'); } }),
+    new RegExp(`${failedCleanup} failed`));
+    assert.deepEqual(order, failedCleanup === 'revoke'
+      ? ['grant', 'run', 'revoke'] : ['grant', 'run', 'revoke', 'verify']);
+  }
+  order.length = 0;
+  assert.throws(() => withMessengerTemp({ grant: () => order.push('grant'),
+    run: () => { order.push('run'); throw new Error('migration failed'); },
+    revoke: () => order.push('revoke'), verifyRevoked: () => order.push('verify') }), /migration failed/);
+  assert.deepEqual(order, ['grant', 'run', 'revoke', 'verify']);
 });
 
 test('composition diff selects only services whose source revision or immutable image changed', () => {

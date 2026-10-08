@@ -6,6 +6,9 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { parseEnv } from 'node:util';
 import { validateManifest, uniformManifest } from './backend-release-state.mjs';
+import { privateBytes } from './backend-runtime-storage-env.mjs';
+import { isAuditedMessengerAttempt, auditedMessengerAttempt, messengerRecoveryHistory,
+  validateCommittedRecoveryReceipt, messengerTempSql, withMessengerTemp } from './backend-storage-prisma-recovery.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(new URL('./meeting3-reviewed-inventory.json', import.meta.url)));
 const runtimeStorage = process.env.CRM_RUNTIME_STORAGE_INSTALL === 'true';
@@ -89,18 +92,21 @@ function verifyDatabaseIdentity(identity) {
 }
 function migrationRows(identity) {
   return psql(identity, `SELECT coalesce(json_agg(row_to_json(r) ORDER BY r.migration_name,r.started_at_utc),'[]'::json)::text FROM
-    (SELECT migration_name,checksum,finished_at IS NOT NULL AS finished,
+    (SELECT id,migration_name,checksum,logs IS NULL AS logs_null,finished_at IS NOT NULL AS finished,
       rolled_back_at IS NOT NULL AS rolled_back,
       to_char(started_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS started_at_utc,
       to_char(finished_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS finished_at_utc,
       to_char(rolled_back_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS rolled_back_at_utc,
       applied_steps_count FROM ${ident(identity.schema)}._prisma_migrations) r;`);
 }
-function verifyRows(service, rows, complete = false) {
+function verifyRows(service, rows, complete = false, allowRecovery = false) {
   const resolved = rows.filter(row => service === 'crm-access' &&
     Object.entries(resolvedAccessBaseline).every(([key,value]) => row[key] === value));
   assert(resolved.length <= 1, 'Unexpected duplicate resolved CRM Access baseline attempt');
-  const active = rows.filter(row => !resolved.includes(row));
+  const audited = rows.filter(row => service === 'crm-access' && (isAuditedMessengerAttempt(row, true) ||
+    (allowRecovery && !complete && isAuditedMessengerAttempt(row, false))));
+  assert(audited.length <= 1, 'Duplicate audited messenger failure');
+  const active = rows.filter(row => !resolved.includes(row) && !audited.includes(row));
   const expected = Object.entries(reviewed(service).migrations);
   assert([expected.length - 1, expected.length].includes(active.length) &&
     (!complete || active.length === expected.length), `Unexpected ${service} migration history`);
@@ -109,6 +115,68 @@ function verifyRows(service, rows, complete = false) {
     assert.equal(row.checksum, expected[index][1], `${service} migration checksum mismatch`);
     assert(row.finished === true && row.rolled_back === false,
       `${service} migration incomplete or rolled back`);
+  });
+}
+function adminTemp(statement, json = false) {
+  const ids = execute('Audited recovery PostgreSQL inventory','docker',['ps','-q',
+    '--filter','label=com.docker.compose.project=aerocrm-backend','--filter','label=com.docker.compose.service=postgres']).split('\n').filter(Boolean);
+  assert.equal(ids.length,1,'Recovery requires the one running managed PostgreSQL container');
+  const output = execute('Audited migration TEMP recovery', 'docker', ['exec','-i',ids[0],
+    'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','aerocrm_cluster_admin','-d','aerocrm_crm_access',
+    '-c',`BEGIN; SET LOCAL statement_timeout='15s'; DO $identity$ BEGIN IF current_user<>'aerocrm_cluster_admin' OR current_database()<>'aerocrm_crm_access' THEN RAISE EXCEPTION 'Unexpected recovery administrator'; END IF; END $identity$; ${statement} COMMIT;`]);
+  return json ? JSON.parse(output) : output;
+}
+function tempState() {
+  return adminTemp(`SELECT json_build_object(
+    'migration',has_database_privilege('aerocrm_crm_access_migration',current_database(),'TEMP'),
+    'runtime',has_database_privilege('aerocrm_crm_access_runtime',current_database(),'TEMP'),
+    'backup',has_database_privilege('aerocrm_crm_access_backup',current_database(),'TEMP'),
+    'public',EXISTS(SELECT 1 FROM pg_database d,LATERAL aclexplode(COALESCE(d.datacl,acldefault('d',d.datdba))) a
+      WHERE d.datname=current_database() AND a.grantee=0 AND a.privilege_type='TEMPORARY'),
+    'directMigration',EXISTS(SELECT 1 FROM pg_database d,LATERAL aclexplode(d.datacl) a
+      WHERE d.datname=current_database() AND a.grantee=(SELECT oid FROM pg_roles WHERE rolname='aerocrm_crm_access_migration')
+        AND a.privilege_type='TEMPORARY' AND NOT a.is_grantable),
+    'acl',(SELECT json_agg(row_to_json(r) ORDER BY grantee,grantor,privilege_type,is_grantable) FROM
+      (SELECT a.grantee,a.grantor,a.privilege_type,a.is_grantable FROM pg_database d,LATERAL aclexplode(d.datacl) a WHERE d.datname=current_database()) r))::text;`, true);
+}
+function verifyTempBaseline() {
+  const state = tempState();
+  assert(!state.migration && !state.runtime && !state.backup && !state.public, 'Audited recovery TEMP must be revoked');
+  return state;
+}
+function recoverMessenger(identity, sha, acl) {
+  const rows = migrationRows(identity).filter(row => row.migration_name === auditedMessengerAttempt.migration_name);
+  const history = messengerRecoveryHistory(rows);
+  const proof = psql(identity, `BEGIN READ ONLY; SELECT json_build_object(
+    'empty',NOT EXISTS(SELECT 1 FROM crm_access.crm_chat_attachments) AND NOT EXISTS(SELECT 1 FROM crm_access.crm_team_command_receipts WHERE command_type='chat.upload'),
+    'checks',(SELECT json_agg(json_build_object('validated',c.convalidated,'noInherit',c.connoinherit,'definition',pg_get_constraintdef(c.oid)))
+      FROM pg_constraint c WHERE c.conrelid='crm_access.crm_chat_attachments'::regclass AND c.contype='c'
+      AND (SELECT attnum FROM pg_attribute WHERE attrelid=c.conrelid AND attname='private_object_key' AND NOT attisdropped)=ANY(c.conkey)))::text; ROLLBACK;`);
+  if (!history.completed) assert.equal(proof.empty, true);
+  assert.equal(proof.checks?.length, 1);
+  assert.equal(proof.checks[0].validated, true); assert.equal(proof.checks[0].noInherit, false);
+  if (!history.completed) assert.equal(sha256(proof.checks[0].definition), 'b9bffbc5b27a8529aa74bdc2049ab6484cf5b53611b52beac718f1104a1b9afa');
+  const before = tempState();
+  assert(!before.runtime && !before.backup && !before.public, 'Recovery cannot widen other TEMP capabilities');
+  if (before.migration) { assert(before.directMigration, 'Unexpected existing migration TEMP capability'); adminTemp(messengerTempSql(false)); }
+  const baseline = verifyTempBaseline();
+  if (history.completed) {
+    verifyRows(identity.service,migrationRows(identity),true);
+    psql(identity,aclSql(identity,acl,true),false); postflight(identity); return;
+  }
+  withMessengerTemp({
+    grant: () => { adminTemp(messengerTempSql(true)); const state=tempState(); assert(state.migration && state.directMigration && !state.runtime && !state.backup && !state.public); },
+    revoke: () => adminTemp(messengerTempSql(false)),
+    verifyRevoked: () => { assert.deepEqual(verifyTempBaseline().acl, baseline.acl, 'Recovery database ACL changed'); },
+    run: () => {
+      if (history.needsResolve) execute('Resolve the one audited failed messenger attempt', 'docker', ['run','--rm','--network','host',
+        '--env','NODE_ENV','--env',identity.key,'--entrypoint','node',`aerocrm/${identity.service}:${sha}`,
+        'node_modules/prisma/build/index.js','migrate','resolve','--rolled-back',auditedMessengerAttempt.migration_name,
+        '--schema','prisma/schema.prisma'], {env:{...process.env,...identity.values}});
+      const resolved = messengerRecoveryHistory(migrationRows(identity).filter(row => row.migration_name === auditedMessengerAttempt.migration_name));
+      assert(!resolved.needsResolve && !resolved.completed, 'Official audited resolution differs');
+      migrate(identity,sha,acl);
+    }
   });
 }
 function imageInventory(identity, sha, manifest) {
@@ -308,13 +376,25 @@ assert(/^[a-f0-9]{40}$/.test(sha) && /^[a-f0-9]{64}$/.test(envHash));
 const manifest = validateManifest(JSON.parse(fs.readFileSync(process.env.BACKEND_MANIFEST_PATH,'utf8')));
 assert.equal(manifest.releaseSha,sha);
 assert(uniformManifest(manifest),'Meeting 3 migration requires full exact-SHA backend manifest');
+const recoveryFile = '/opt/aerocrm/releases/runtime-storage-prisma-recovery.json';
+const recovery = runtimeStorage && !readOnlyMode && fs.existsSync(recoveryFile) ?
+  validateCommittedRecoveryReceipt(JSON.parse(privateBytes(recoveryFile))) : null;
+if (recovery) {
+  assert.equal(recovery.target.infraSha,process.env.INFRA_SHA); assert.deepEqual(recovery.target.manifest,manifest);
+  const marker = JSON.parse(privateBytes('/opt/aerocrm/releases/runtime-storage-forward.json'));
+  for (const key of Object.keys(recovery.marker).filter(key=>!['phase','sourceMailCleaned','supportDeleteReady'].includes(key)))
+    assert.deepEqual(marker[key],recovery.marker[key], 'Recovery copy provenance changed');
+  // A killed prior process may leave the receipt-authorized TEMP grant behind.
+  // Revoke it before any later preflight can reject an unknown new failed attempt.
+  adminTemp(messengerTempSql(false)); verifyTempBaseline();
+}
 const identities = services.map(privateIdentity);
 const lines = identities.map(identity => `${sha256(identity.bytes)}  ./${identity.service}.env\n`).join('');
 assert.equal(sha256(lines),envHash,'Meeting 3 private env aggregate hash mismatch');
 // Every owner is checked before the first DDL; a rerun may find one applied and the other pending.
 const acls = identities.map(identity => imageInventory(identity,sha,manifest));
 identities.forEach(verifyDatabaseIdentity);
-identities.forEach(identity => verifyRows(identity.service,migrationRows(identity)));
+identities.forEach(identity => verifyRows(identity.service,migrationRows(identity),false,!!recovery));
 if (readOnlyMode) {
   if (readOnlyMode === '--read-only-postflight') for (const identity of identities) {
     verifyRows(identity.service,migrationRows(identity),true);
@@ -325,6 +405,7 @@ if (readOnlyMode) {
   process.exit(0);
 }
 for (const [index,identity] of identities.entries()) {
-  migrate(identity,sha,acls[index]);
+  if (recovery && identity.service === 'crm-access') recoverMessenger(identity,sha,acls[index]);
+  else migrate(identity,sha,acls[index]);
   console.log(`Meeting 3 migration and ACL verified: ${identity.service}`);
 }

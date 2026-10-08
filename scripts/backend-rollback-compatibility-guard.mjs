@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { parseEnv } from 'node:util';
+import { auditedMessengerAttemptSql } from './backend-storage-prisma-recovery.mjs';
 
 const [candidateSha, ...modes] = process.argv.slice(2);
 const manifestMode = modes.includes('--manifest');
@@ -409,8 +410,8 @@ const messengerIdentity = readDatabaseUrl(crmAccessEnvFile, 'CRM_ACCESS_DATABASE
 });
 const messengerState = inspectDatabase(messengerIdentity, `SELECT json_build_object(
   'recorded', EXISTS(SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}'),
-  'valid', (SELECT count(*)<=1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}')
-    AND NOT EXISTS(SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}'
+  'valid', (SELECT count(*)<=1 FROM crm_access._prisma_migrations m WHERE migration_name='${messengerEntry.migration}' AND NOT (${auditedMessengerAttemptSql()}))
+    AND NOT EXISTS(SELECT 1 FROM crm_access._prisma_migrations m WHERE migration_name='${messengerEntry.migration}' AND NOT (${auditedMessengerAttemptSql()})
       AND (checksum<>'${messengerEntry.migrations[messengerEntry.migration]}' OR rolled_back_at IS NOT NULL)),
   'completed', (SELECT count(*)=1 FROM crm_access._prisma_migrations WHERE migration_name='${messengerEntry.migration}'
     AND checksum='${messengerEntry.migrations[messengerEntry.migration]}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
