@@ -239,11 +239,18 @@ test('PostgreSQL 18 requires narrowly scoped TEMP for the migration role and res
   const runMigration = () => run(['exec', '-i', name, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
     '-U', 'aerocrm_crm_access_migration', '-d', 'aerocrm_crm_access'], { input: messengerMigrationSql });
   const deadline = Date.now() + 120_000;
+  let readyDatabase;
   while (Date.now() < deadline) {
-    try { run(['exec', name, 'pg_isready', '-U', 'postgres', '-d', 'aerocrm_crm_access'], { stdio: 'ignore' }); break; }
+    try {
+      readyDatabase = run(['exec', '--env', 'PGPASSWORD=fixture-only', name, 'psql', '-h', '127.0.0.1',
+        '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'aerocrm_crm_access',
+        '-c', 'SELECT current_database();']).trim();
+      if (readyDatabase === 'aerocrm_crm_access') break;
+      readyDatabase = undefined;
+    }
     catch { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500); }
   }
-  assert(Date.now() < deadline, 'PostgreSQL 18 fixture did not become ready');
+  assert.equal(readyDatabase, 'aerocrm_crm_access', 'PostgreSQL 18 final TCP listener and fixture database must be ready');
   psqlAdmin(`CREATE ROLE aerocrm_crm_access_db_owner LOGIN;
 CREATE ROLE aerocrm_crm_access_migration LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
 CREATE ROLE aerocrm_crm_access_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
