@@ -76,6 +76,25 @@ export function validatePending(pending, canonical = null) {
   }
   return pending;
 }
+// One reviewed pre-copy incident: only infra provenance may change on retry.
+export function reviewedStoragePendingAmendment({ pending, canonical, target, storageInstall,
+  storageBeforeHash, liveEnvHash, liveComposeHash, markerPresent, chatMigrationAbsent, runtimeVerified }) {
+  validatePending(pending, canonical); validateState(target);
+  assert.equal(storageInstall, true, 'Pending provenance amendment requires storage installation');
+  assert.equal(pending.target.infraSha, 'dca6f91a1d942fceadfc68317206c9f9c99bb06d',
+    'Pending provenance amendment is restricted to the reviewed failed infra');
+  assert.notEqual(target.infraSha, pending.target.infraSha, 'Pending provenance amendment requires new infra');
+  assert(isDeepStrictEqual(canonical, pending.previous), 'Pending amendment requires unchanged canonical previous state');
+  assert(isDeepStrictEqual(target, { ...pending.target, infraSha: target.infraSha }),
+    'Pending amendment may change only infra provenance');
+  assert.equal(markerPresent, false, 'Storage marker forbids pending provenance amendment');
+  assert.equal(chatMigrationAbsent, true, 'Any messenger migration attempt forbids pending amendment');
+  assert.equal(runtimeVerified, true, 'Pending amendment requires exact previous runtime');
+  assert.equal(storageBeforeHash, pending.previous.envHash, 'Pending amendment before env hash changed');
+  assert.equal(liveEnvHash, pending.previous.envHash, 'Pending amendment live env changed');
+  assert.equal(liveComposeHash, pending.previous.composeHash, 'Pending amendment live compose changed');
+  return { ...pending, target };
+}
 export function compositionDiff(previous, target) {
   validateManifest(target); if (previous) validateManifest(previous);
   return apps.filter(app => !previous || previous.services[app].imageId !== target.services[app].imageId ||

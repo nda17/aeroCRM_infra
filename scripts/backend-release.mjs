@@ -8,12 +8,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, uniformManifest, compositionDiff,
-  imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig } from './backend-release-state.mjs';
+  imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig, reviewedStoragePendingAmendment } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
-import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences } from './backend-runtime-storage-env.mjs';
+import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences, privateStorageUser } from './backend-runtime-storage-env.mjs';
 import { createRequire } from 'node:module';
 const { validateManifest: validateStorageManifest } = createRequire(import.meta.url)('./runtime-storage-copy.cjs');
 import { atomic, publishRabbitmqConfig, recoverRabbitmqConfig, validateRabbitmqContainer } from './backend-rabbitmq-config.mjs';
@@ -437,7 +437,7 @@ function withStorageSource(action) {
   finally { fs.rmSync(sourceFile, { force: true }); }
 }
 function storageCopy(mode) {
-  return withStorageSource(sourceFile => execute(`Reviewed storage ${mode}`, 'timeout', ['310s', 'docker', 'run', '--rm', '--read-only', '--user', '0:0',
+  return withStorageSource(sourceFile => execute(`Reviewed storage ${mode}`, 'timeout', ['310s', 'docker', 'run', '--rm', '--read-only', '--user', privateStorageUser(),
     '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
     '--env', `STORAGE_MANIFEST_HASH=${storageManifestHash}`, '--env', `STORAGE_COPY_MODE=${mode}`,
     '--mount', `type=bind,src=${storageBundleFile},dst=/reviewed/runtime-storage-env.json,readonly`,
@@ -449,7 +449,7 @@ function storageCopy(mode) {
 function runtimeStorageProbe() {
   return withStorageSource(sourceFile => {
     for (const owner of Object.keys(storageOwners)) execute('Reviewed independent runtime storage scope probe', 'timeout', ['130s',
-      'docker', 'run', '--rm', '--read-only', '--user', '0:0', '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
+      'docker', 'run', '--rm', '--read-only', '--user', privateStorageUser(), '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
       '--env', `STORAGE_OWNER=${owner}`, '--mount', `type=bind,src=${storageBundleFile},dst=/reviewed/chat-env.json,readonly`,
       '--mount', `type=bind,src=${sourceFile},dst=/reviewed/source-storage.json,readonly`,
       '--mount', `type=bind,src=${stagedRoot}/scripts/chat-storage-probe.cjs,dst=/reviewed/chat-storage-probe.cjs,readonly`,
@@ -505,7 +505,7 @@ function runMigrations() {
       'Private Chat probe configuration metadata mismatch');
     validateChatBundle(fs.readFileSync(bundleFile), chatEnvBundleHash);
     execute('Reviewed independent Chat storage scope probe', 'timeout', ['130s', 'docker', 'run', '--rm',
-      '--read-only', '--user', '0:0', '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
+      '--read-only', '--user', privateStorageUser(), '--network', 'host', '--cap-drop=ALL', '--security-opt', 'no-new-privileges',
       '--mount', `type=bind,src=${bundleFile},dst=/reviewed/chat-env.json,readonly`,
       '--mount', `type=bind,src=${stagedRoot}/scripts/chat-storage-probe.cjs,dst=/reviewed/chat-storage-probe.cjs,readonly`,
       '--entrypoint', 'node', `aerocrm/crm-access:${sha}`, '/reviewed/chat-storage-probe.cjs']);
@@ -550,7 +550,8 @@ function bootstrap() {
 
 inspectImages(manifest);
 const canonical = fs.existsSync(stateFile) ? validateState(JSON.parse(fs.readFileSync(stateFile, 'utf8'))) : null;
-const pending = fs.existsSync(pendingFile) ? JSON.parse(fs.readFileSync(pendingFile, 'utf8')) : null;
+const originalPendingBytes = fs.existsSync(pendingFile) ? privateBytes(pendingFile) : null;
+let pending = originalPendingBytes ? JSON.parse(originalPendingBytes.toString('utf8')) : null;
 if (pending) {
   validatePending(pending, canonical);
   assert.equal(pending.target.manifest.releaseSha, sha, 'Pending release requires the exact original target SHA');
@@ -598,6 +599,28 @@ if (envInstall) {
   } finally { fs.rmSync(candidate, { recursive: true, force: true }); }
 } else snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
 rolesForPlan(expectedEffectivePlan(target), true);
+if (pending && stateKey(pending.target) !== stateKey(target)) {
+  assert(storageInstall && !fs.existsSync(storageMarker), 'Pending provenance recovery requires pre-marker storage installation');
+  verifyRuntime(previous, null, true);
+  const chatMigrationAbsent = storageDatabase('crm-access', `SELECT json_build_object('absent', NOT EXISTS (
+    SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='20261008010000_messenger_storage_prefix'))::text;`).absent;
+  const amended = reviewedStoragePendingAmendment({ pending, canonical, target, storageInstall, storageBeforeHash,
+    liveEnvHash: envHash(`${root}/env/backend`), liveComposeHash: composeHash(`${root}/compose`),
+    markerPresent: fs.existsSync(storageMarker), chatMigrationAbsent, runtimeVerified: true });
+  // Preserve exact original bytes before replacement, using an exclusive private archive.
+  const originalHash = digest(originalPendingBytes);
+  assert.equal(digest(privateBytes(pendingFile)), originalHash, 'Pending journal changed before recovery');
+  const archive = `${releases}/backend-release.pending.${originalHash}.original.json`;
+  if (fs.existsSync(archive)) assert.equal(digest(privateBytes(archive)), originalHash, 'Pending archive changed');
+  else {
+    const fd = fs.openSync(archive, 'wx', 0o600);
+    try { fs.writeFileSync(fd, originalPendingBytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  }
+  assert(!fs.existsSync(storageMarker), 'Storage marker appeared before pending amendment');
+  assert.equal(digest(privateBytes(pendingFile)), originalHash, 'Pending journal changed during recovery');
+  writeJson(pendingFile, amended);
+  pending = amended;
+}
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 recoverRabbitmq(previous, pending ? target : null);
 if (canonical && stateKey(canonical) === stateKey(target)) {

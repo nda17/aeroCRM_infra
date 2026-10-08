@@ -8,6 +8,7 @@ import {
   runtimeStorageEnvironmentCandidate,
   runtimeStorageKeys,
   stageRuntimeStorageEnvironment,
+  privateStorageUser,
   storageFields,
   storageOwners,
   storageReferenceHash,
@@ -85,6 +86,14 @@ test('storage reference fingerprint sorts input rows, normalizes UTC dates, and 
   assert.throws(() => storageReferenceHash([['support', 'attachment', 'key', 'ATTACHED', 'z'.repeat(64), 1, null]]));
   assert.throws(() => storageReferenceHash([['mail', 'attachment', 'key', 'VALIDATED', null, -1, null]]));
   assert.throws(() => storageReferenceHash([['mail', 'attachment', 'key', 'VALIDATED', null, 1, '2026-10-08 00:00:00']]));
+});
+
+test('private storage container identity follows the host file owner and rejects invalid IDs', () => {
+  assert.equal(privateStorageUser(1000, 1000), '1000:1000');
+  assert.equal(privateStorageUser(0, 0), '0:0');
+  for (const [uid, gid] of [[-1, 1000], [1000, -1], [1.5, 1000], [1000, Number.MAX_SAFE_INTEGER + 1], [null, 1000]]) {
+    assert.throws(() => privateStorageUser(uid, gid), /valid host UID and GID/);
+  }
 });
 
 test('accepts the exact canonical 25-key bundle and rejects wrong hash, key set, bucket, or reused principals', () => {

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, validatePending,
-  compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig }
+  compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig,
+  reviewedStoragePendingAmendment }
   from './backend-release-state.mjs';
 
 const sha = char => char.repeat(40);
@@ -33,6 +34,18 @@ function state(release, run) {
   return { schemaVersion: 1, manifest: manifest({ release, run }), infraSha: sha('e'),
     envHash: hash('f'), composeHash: hash('1'),
     closure: { enabled: true, schemaAnchorSha: sha('2') } };
+}
+
+function storageRecoveryFixture() {
+  const previous = state(sha('a'), '101');
+  const target = { ...state(sha('f'), '202'), infraSha: 'dca6f91a1d942fceadfc68317206c9f9c99bb06d' };
+  const pending = { schemaVersion: 1, target, previous, phase: 'switching' };
+  const canonical = structuredClone(previous);
+  const nextTarget = { ...target, infraSha: sha('9') };
+  const args = { pending, canonical, target: nextTarget, storageInstall: true,
+    storageBeforeHash: previous.envHash, liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
+    markerPresent: false, chatMigrationAbsent: true, runtimeVerified: true };
+  return { previous, target, pending, canonical, nextTarget, args };
 }
 
 function effectiveConfigFixture() {
@@ -120,6 +133,41 @@ test('pending journal accepts exact switching state against either canonical sid
     assert.throws(() => validatePending(value));
   }
   assert.throws(() => validatePending(pending, state(sha('9'), '303')), /disagrees/);
+});
+
+test('reviewed storage recovery amends only infra provenance for the exact pre-marker previous runtime', () => {
+  const { pending, args, nextTarget } = storageRecoveryFixture();
+  const amended = reviewedStoragePendingAmendment(args);
+  assert.deepEqual(amended, { ...pending, target: nextTarget });
+  assert.equal(amended.target.infraSha, sha('9'));
+  assert.deepEqual(amended.target.manifest, pending.target.manifest);
+  assert.equal(amended.previous.envHash, pending.previous.envHash);
+  assert.equal(amended.previous.composeHash, pending.previous.composeHash);
+});
+
+test('reviewed storage recovery rejects marker, migration/DDL, applied target, and runtime/config drift', () => {
+  const fixture = storageRecoveryFixture();
+  const invalid = [
+    args => { args.markerPresent = true; },
+    args => { args.chatMigrationAbsent = false; },
+    args => { args.canonical = structuredClone(args.target); },
+    args => { args.liveEnvHash = hash('8'); },
+    args => { args.liveComposeHash = hash('8'); },
+    args => { args.storageBeforeHash = hash('8'); },
+    args => { args.runtimeVerified = false; },
+    args => { args.storageInstall = false; },
+    args => { args.target = { ...args.target, manifest: manifest({ release: sha('9'), run: '303' }) }; },
+    args => { args.target = { ...args.target, envHash: hash('8') }; },
+    args => { args.pending = { ...args.pending, previous: { ...args.pending.previous, envHash: hash('8') } }; },
+    args => { args.pending = { ...args.pending, target: { ...args.pending.target, infraSha: sha('8') } }; },
+    args => { args.target = { ...args.target, composeHash: hash('8') }; },
+    args => { args.target = { ...args.target, closure: { ...args.target.closure, enabled: false, schemaAnchorSha: null } }; },
+  ];
+  for (const mutate of invalid) {
+    const args = structuredClone(fixture.args);
+    mutate(args);
+    assert.throws(() => reviewedStoragePendingAmendment(args));
+  }
 });
 
 test('composition diff selects only services whose source revision or immutable image changed', () => {

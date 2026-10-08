@@ -7,6 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { environmentHash } from './backend-chat-env.mjs';
 
+// Capabilityless containers must read private bind mounts as their host owner.
+export function privateStorageUser(uid = process.getuid?.(), gid = process.getgid?.()) {
+  assert(Number.isSafeInteger(uid) && uid >= 0 && Number.isSafeInteger(gid) && gid >= 0,
+    'Private storage container requires a valid host UID and GID');
+  return `${uid}:${gid}`;
+}
+
 export const storageFields = ['ENDPOINT', 'REGION', 'BUCKET', 'ACCESS_KEY_ID', 'SECRET_ACCESS_KEY', 'FORCE_PATH_STYLE'];
 export const storageOwners = {
   CRM_MAIL: ['crm-customers-api.env', 'crm-customers-mail-sync.env', 'crm-customers-mail-send.env'],
