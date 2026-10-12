@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { parseEnv } from 'node:util';
 import { validateManifest, uniformManifest } from './backend-release-state.mjs';
+import { auditedMessengerAttempt, isAuditedMessengerAttempt } from './backend-storage-prisma-recovery.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
 const services = ['crm-access'];
@@ -77,18 +78,20 @@ function psql(identity, statement, json = true) {
 }
 function migrationRows(identity) {
   return psql(identity, `SELECT coalesce(json_agg(row_to_json(r) ORDER BY r.migration_name,r.started_at_utc),'[]'::json)::text FROM
-    (SELECT migration_name,checksum,finished_at IS NOT NULL AS finished,
+    (SELECT id,migration_name,checksum,finished_at IS NOT NULL AS finished,
       rolled_back_at IS NOT NULL AS rolled_back,
       to_char(started_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS started_at_utc,
       to_char(finished_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS finished_at_utc,
       to_char(rolled_back_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS rolled_back_at_utc,
-      applied_steps_count FROM ${ident(identity.schema)}._prisma_migrations) r;`);
+      applied_steps_count,logs IS NULL AS logs_null FROM ${ident(identity.schema)}._prisma_migrations) r;`);
 }
 function verifyRows(service, rows, complete = false) {
   const resolved = rows.filter(row => service === 'crm-access' &&
     Object.entries(resolvedAccessBaseline).every(([key,value]) => row[key] === value));
   assert(resolved.length <= 1, 'Unexpected duplicate resolved CRM Access baseline attempt');
-  const active = rows.filter(row => !resolved.includes(row));
+  const audited = rows.filter(row => service === 'crm-access' && isAuditedMessengerAttempt(row, true));
+  assert(audited.length <= 1, 'Unexpected duplicate audited messenger failure');
+  const active = rows.filter(row => !resolved.includes(row) && !audited.includes(row));
   const expected = Object.entries(reviewed(service).migrations);
   assert([expected.length - 1, expected.length].includes(active.length) &&
     (!complete || active.length === expected.length), `Unexpected ${service} migration history`);
@@ -281,6 +284,15 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   const access = Object.entries(reviewed('crm-access').migrations).map(([migration_name,checksum]) =>
     ({migration_name,checksum,finished:true,rolled_back:false}));
   verifyRows('crm-access',[{...resolvedAccessBaseline,finished:false,rolled_back:true},...access],true);
+  const audited = {...auditedMessengerAttempt, rolled_back_at_utc:'2026-10-08T01:14:30.152113Z',
+    finished:false, rolled_back:true};
+  verifyRows('crm-access',[{...resolvedAccessBaseline,finished:false,rolled_back:true},audited,...access],true);
+  assert.throws(() => verifyRows('crm-access',[audited,{...audited},...access],true),
+    /duplicate audited messenger failure/);
+  assert.throws(() => verifyRows('crm-access',[{...audited,id:'unknown'},...access],true),
+    /Unexpected crm-access migration history/);
+  assert.throws(() => verifyRows('crm-access',[{...audited,rolled_back_at_utc:null},...access],true),
+    /Unexpected crm-access migration history/);
   const fixture = [{bytes:Buffer.from('NODE_ENV=production\nCRM_ACCESS_DATABASE_URL=fixture\n')}];
   const fileHash = sha256(fixture[0].bytes);
   verifyMigrationEnvHash(fixture,fileHash);
