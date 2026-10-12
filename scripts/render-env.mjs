@@ -69,6 +69,7 @@ const roles = [
   ['support', 'api', 5100], ['support', 'worker', 5101], ['support', 'outbox-publisher', 5102],
   ['operations', 'api', 5200], ['operations', 'worker', 5201], ['operations', 'outbox-publisher', 5202],
   ['crm-access', 'api', 5300], ['crm-access', 'worker', 5301], ['crm-access', 'outbox-publisher', 5302],
+  ['crm-access', 'telegram-worker', 5303],
   ['crm-intake', 'api', 5310], ['crm-intake', 'worker', 5311], ['crm-intake', 'publisher', 5312],
   ['crm-intake', 'sla-worker', 5317], ['crm-intake', 'sla-publisher', 5318],
   ['crm-customers', 'api', 5320], ['crm-customers', 'mail-sync', 5321], ['crm-customers', 'mail-send', 5322], ['crm-sales', 'api', 5330], ['crm-sales', 'reminders', 5331],
@@ -88,7 +89,8 @@ for (const [service, role, port, explicit] of roles) {
     : rolePorts ? `${prefix}_${role.replaceAll('-', '_').toUpperCase()}_PORT` : `${prefix}_PORT`;
   env[portKey] = String(port);
   if (!['api', 'scheduler'].includes(role) && service !== 'crm-customers') {
-    Object.assign(env, { RABBITMQ_URL: broker(runtime), RABBITMQ_CONNECTION_NAME: `aerocrm-${runtime}`,
+    Object.assign(env, { RABBITMQ_URL: broker(runtime === 'crm-access-telegram-worker' ? 'crm-access-worker' : runtime),
+      RABBITMQ_CONNECTION_NAME: `aerocrm-${runtime}`,
       RABBITMQ_ASSERT_TOPOLOGY: 'false', RABBITMQ_MAX_MESSAGE_BYTES: '262144' });
   }
   if (service === 'identity' && isApi) Object.assign(env, smtp, base('BILLING'), tokens(['BILLING_IDENTITY_TOKEN']),
@@ -214,6 +216,13 @@ const routes = [
     "upstreamUrl": "http://127.0.0.1:4900",
     "authPolicy": "required",
     "timeoutMs": 60000
+  },
+  {
+    "id": "telegram-business-webhook",
+    "pathPrefix": "/api/v1/telegram-bot/business-webhook",
+    "upstreamUrl": "http://127.0.0.1:5300",
+    "authPolicy": "telegram-webhook",
+    "timeoutMs": 15000
   },
   {
     "id": "identity-info-webhook",

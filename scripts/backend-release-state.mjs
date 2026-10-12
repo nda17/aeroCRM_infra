@@ -12,25 +12,30 @@ export const roles = {
   platform: ['platform-api', 'platform-outbox-publisher'],
   support: ['support-api', 'support-worker', 'support-outbox-publisher'],
   operations: ['operations-api', 'operations-worker', 'operations-outbox-publisher'],
-  'crm-access': ['crm-access-api', 'crm-access-worker', 'crm-access-outbox-publisher'],
+  'crm-access': ['crm-access-api', 'crm-access-worker', 'crm-access-outbox-publisher', 'crm-access-telegram-worker'],
   'crm-intake': ['crm-intake-api', 'crm-intake-worker', 'crm-intake-publisher', 'crm-intake-sla-worker', 'crm-intake-sla-publisher'],
   'crm-customers': ['crm-customers-api', 'crm-customers-mail-sync', 'crm-customers-mail-send'], 'crm-sales': ['crm-sales-api', 'crm-sales-reminders']
 };
 export const ports = [4100, 4401, 4500, 4600, 4800, 4801, 4802, 4803, 4900, 4901, 4902,
-  5000, 5001, 5100, 5101, 5102, 5200, 5201, 5202, 5300, 5301, 5302, 5310, 5311, 5312,
+  5000, 5001, 5100, 5101, 5102, 5200, 5201, 5202, 5300, 5301, 5302, 5303, 5310, 5311, 5312,
   5317, 5318, 5320, 5321, 5322, 5330, 5331];
-// Historical immutable Compose snapshots have 30 roles. A reviewed target must
-// have both mail roles; never accept only one worker or infer from live containers.
-export function rolesForPlan(services, requireMail = false) {
+// Historical immutable Compose snapshots have 30 or 32 roles. A reviewed target
+// requires both mail roles and the Telegram worker; never infer roles from live containers.
+export function rolesForPlan(services, requireMail = false, requireTelegram = false) {
   const hasSync = Object.hasOwn(services, 'crm-customers-mail-sync');
   const hasSend = Object.hasOwn(services, 'crm-customers-mail-send');
   assert.equal(hasSync, hasSend, 'Mail process roles must be paired');
   assert(!requireMail || hasSync, 'Reviewed target requires both mail process roles');
-  return { ...roles, 'crm-customers': hasSync ? roles['crm-customers'] : ['crm-customers-api'] };
+  const hasTelegram = Object.hasOwn(services, 'crm-access-telegram-worker');
+  assert(!requireTelegram || hasTelegram, 'Reviewed target requires Telegram worker role');
+  return { ...roles,
+    'crm-access': hasTelegram ? roles['crm-access'] : roles['crm-access'].filter(role => role !== 'crm-access-telegram-worker'),
+    'crm-customers': hasSync ? roles['crm-customers'] : ['crm-customers-api'] };
 }
 export function portsForPlan(services) {
   const selected = rolesForPlan(services);
-  return selected['crm-customers'].length === 3 ? ports : ports.filter(port => ![5321, 5322].includes(port));
+  return ports.filter(port => (selected['crm-customers'].length === 3 || ![5321, 5322].includes(port)) &&
+    (selected['crm-access'].includes('crm-access-telegram-worker') || port !== 5303));
 }
 const sha = /^[a-f0-9]{40}$/;
 const hash = /^[a-f0-9]{64}$/;

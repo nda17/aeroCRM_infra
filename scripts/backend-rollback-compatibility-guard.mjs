@@ -33,6 +33,8 @@ const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-custo
 const meeting3Inventory = JSON.parse(fs.readFileSync(new URL('./meeting3-reviewed-inventory.json', import.meta.url)));
 const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
 const messengerEntry = messengerInventory.owners['crm-access'];
+const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
+const telegramEntry = telegramInventory.owners['crm-access'];
 const collaborationInventory = JSON.parse(fs.readFileSync(new URL('./workspace-collaboration-reviewed-inventory.json', import.meta.url)));
 const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
@@ -74,6 +76,7 @@ function closureImageReviewed(service, sha, execute = run) {
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
+  if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -98,6 +101,13 @@ function assertMessengerCapability({ markerPresent, recorded, valid, completed, 
   assert(valid, 'Persisted messenger migration differs from its reviewed checksum');
   assert(!(markerPresent || recorded) || (completed && capable),
     'Candidate Access image cannot preserve permanent messenger storage capability');
+}
+function assertTelegramBusinessCapability({ recorded, valid, completed, capable }) {
+  assert([recorded, valid, completed, capable].every(value => typeof value === 'boolean'),
+    'Invalid Telegram Business capability state');
+  assert(valid, 'Persisted Telegram Business migration differs from its reviewed checksum');
+  assert(!recorded || (completed && capable),
+    'Candidate Access image cannot preserve the Telegram Business schema capability');
 }
 function commerceBusinessDataQuery() {
   return `SELECT json_build_object('businessWrites', ${commerceBusinessDataTables
@@ -283,7 +293,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(previousWorkspace, true), false);
   assert.equal(reviewCustomers(importInventory.owners['crm-customers'], true), false);
   const accessPairs = [closureInventory.owners['crm-access'], uxInventory.owners['crm-access'],
-    collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry];
+    collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry, telegramEntry];
   const reviewAccess = (pair, { badChecksum = false, badAcl = false } = {}) => {
     let calls = 0;
     const result = closureImageReviewed('crm-access', 'c'.repeat(40), (_label, executable, args) => {
@@ -302,6 +312,13 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewAccess(messengerEntry), true, 'Access image with the reviewed messenger migration and ACL is accepted');
   assert.equal(reviewAccess(messengerEntry, { badChecksum: true }), false);
   assert.equal(reviewAccess(messengerEntry, { badAcl: true }), false);
+  assert.equal(reviewAccess(telegramEntry), true, 'Access image with reviewed Telegram Business migration and ACL is accepted');
+  assertTelegramBusinessCapability({ recorded: false, valid: true, completed: false, capable: false });
+  assertTelegramBusinessCapability({ recorded: true, valid: true, completed: true, capable: true });
+  assert.throws(() => assertTelegramBusinessCapability({ recorded: true, valid: true, completed: true, capable: false }),
+    /cannot preserve/);
+  assert.throws(() => assertTelegramBusinessCapability({ recorded: true, valid: false, completed: false, capable: false }),
+    /differs/);
   assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: true });
   assert.throws(() => assertLegacySingleSession('0'.repeat(40), { singleSessionPolicy: true }), /reviewed pre-migration Identity baseline/);
   assert.throws(() => assertLegacySingleSession(plannerInventory.owners.identity.previousCompatibleSha, { singleSessionPolicy: false }), /exact single-session database guards/);
@@ -417,6 +434,17 @@ const messengerState = inspectDatabase(messengerIdentity, `SELECT json_build_obj
     AND checksum='${messengerEntry.migrations[messengerEntry.migration]}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
 assertMessengerCapability({ markerPresent: fs.existsSync('/opt/aerocrm/releases/runtime-storage-forward.json'),
   recorded: messengerState.recorded, valid: messengerState.valid, completed: messengerState.completed, capable: messengerCapable });
+const telegramCapable = imageCapabilities(candidateImage('crm-access'), [telegramEntry.migration],
+  { [telegramEntry.migration]: telegramEntry.migrations[telegramEntry.migration] })[0];
+const telegramState = inspectDatabase(messengerIdentity, `SELECT json_build_object(
+  'recorded', EXISTS(SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='${telegramEntry.migration}'),
+  'valid', NOT EXISTS(SELECT 1 FROM crm_access._prisma_migrations WHERE migration_name='${telegramEntry.migration}'
+    AND (checksum<>'${telegramEntry.migrations[telegramEntry.migration]}' OR rolled_back_at IS NOT NULL)),
+  'completed', (SELECT count(*)=1 FROM crm_access._prisma_migrations WHERE migration_name='${telegramEntry.migration}'
+    AND checksum='${telegramEntry.migrations[telegramEntry.migration]}'
+    AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
+assertTelegramBusinessCapability({ recorded: telegramState.recorded, valid: telegramState.valid,
+  completed: telegramState.completed, capable: telegramCapable });
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&

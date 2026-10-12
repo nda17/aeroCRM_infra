@@ -252,6 +252,16 @@ services:
       NODE_ENV: production
     security_opt:
       - no-new-privileges:true
+  crm-access-telegram-worker:
+    image: aerocrm/crm-access:${CRM_ACCESS_IMAGE_SHA:-${IMAGE_SHA:?exact release SHA required}}
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../env/backend/crm-access-telegram-worker.env
+    environment:
+      APP_REVISION: ${CRM_ACCESS_IMAGE_SHA:-${IMAGE_SHA}}
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
   crm-access-outbox-publisher:
     image: aerocrm/crm-access:${CRM_ACCESS_IMAGE_SHA:-${IMAGE_SHA:?exact release SHA required}}
     restart: unless-stopped
