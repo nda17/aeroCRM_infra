@@ -37,6 +37,7 @@ jobs:
           node --check scripts/telegram-business-webhook.mjs
           node --check scripts/backend-rollback-compatibility-guard.mjs
           python3 -c "from pathlib import Path; compile(Path('scripts/telegram-business-relay.py').read_text(), 'scripts/telegram-business-relay.py', 'exec')"
+          python3 scripts/telegram-business-relay.test.py
           node --check scripts/runtime-storage-copy.cjs
           node --check scripts/chat-storage-probe.cjs
           node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs scripts/backend-mail-env.test.mjs scripts/backend-chat-env.test.mjs scripts/backend-runtime-storage-env.test.mjs scripts/backend-telegram-business-env.test.mjs scripts/runtime-storage-copy.test.cjs scripts/chat-storage-probe.test.cjs
