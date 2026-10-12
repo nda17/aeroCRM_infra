@@ -63,6 +63,11 @@ function privateIdentity(service) {
   return {service,schema,owner,key,values,bytes,password:decodeURIComponent(url.password),
     database:`aerocrm_${schema}`,runtime:`aerocrm_${schema}_runtime`,backup:`aerocrm_${schema}_backup`};
 }
+function verifyMigrationEnvHash(identities, expectedHash) {
+  assert.equal(identities.length, 1, 'Telegram Business migration has exactly one database owner');
+  assert.equal(sha256(identities[0].bytes), expectedHash,
+    'Telegram Business private migration env file hash mismatch');
+}
 function psql(identity, statement, json = true) {
   const output = execute(`${identity.service} database inspection`, 'docker', [
     'run','--rm','--network','host','--env','PGPASSWORD','--entrypoint','psql','postgres:18',
@@ -276,6 +281,13 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   const access = Object.entries(reviewed('crm-access').migrations).map(([migration_name,checksum]) =>
     ({migration_name,checksum,finished:true,rolled_back:false}));
   verifyRows('crm-access',[{...resolvedAccessBaseline,finished:false,rolled_back:true},...access],true);
+  const fixture = [{bytes:Buffer.from('NODE_ENV=production\nCRM_ACCESS_DATABASE_URL=fixture\n')}];
+  const fileHash = sha256(fixture[0].bytes);
+  verifyMigrationEnvHash(fixture,fileHash);
+  assert.throws(() => verifyMigrationEnvHash(fixture,sha256(`${fileHash}  ./crm-access.env\n`)),
+    /private migration env file hash mismatch/);
+  assert.throws(() => verifyMigrationEnvHash([...fixture,...fixture],fileHash),
+    /exactly one database owner/);
   console.log('Telegram Business migration policy fixtures verified');
   process.exit(0);
 }
@@ -289,8 +301,7 @@ const manifest = validateManifest(JSON.parse(fs.readFileSync(process.env.BACKEND
 assert.equal(manifest.releaseSha,sha);
 assert(uniformManifest(manifest),'Telegram Business migration requires full exact-SHA backend manifest');
 const identities = services.map(privateIdentity);
-const lines = identities.map(identity => `${sha256(identity.bytes)}  ./${identity.service}.env\n`).join('');
-assert.equal(sha256(lines),envHash,'Telegram Business private env aggregate hash mismatch');
+verifyMigrationEnvHash(identities,envHash);
 // Every owner is checked before the first DDL; a rerun may find one applied and the other pending.
 const acls = identities.map(identity => imageInventory(identity,sha,manifest));
 identities.forEach(identity => verifyRows(identity.service,migrationRows(identity)));
