@@ -31,6 +31,14 @@ const importInventory = JSON.parse(fs.readFileSync(new URL('./crm-file-imports-r
 const importMigration = '20261001000000_crm_file_imports';
 const plannerInventory = JSON.parse(fs.readFileSync(new URL('./crm-planner-customization-reviewed-inventory.json', import.meta.url)));
 const meeting3Inventory = JSON.parse(fs.readFileSync(new URL('./meeting3-reviewed-inventory.json', import.meta.url)));
+const salesReminderFkMigration = '20261013000000_reminder_delivery_foreign_keys';
+const salesReminderFkInventory = {
+  migrations: { ...meeting3Inventory.owners['crm-sales'].migrations,
+    [salesReminderFkMigration]: '196d9b7073b3d64cfcc64e619f7c864a2385aedf5086067245ed5ef3c3819aa8' },
+  aclSha256: 'e43d8f2afcbb3b36039a1ce5cb310e99a1830ed0fcd5c4a1be0a6259112fc0b3'
+};
+assert.equal(meeting3Inventory.owners['crm-sales'].aclSha256, salesReminderFkInventory.aclSha256,
+  'Reviewed CRM Sales reminder FK ACL differs from the prior schema');
 const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
 const messengerEntry = messengerInventory.owners['crm-access'];
 const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
@@ -75,6 +83,7 @@ function closureImageReviewed(service, sha, execute = run) {
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
+  if (service === 'crm-sales') accepted.push(salesReminderFkInventory);
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
   const image = `aerocrm/${service}:${sha}`;
@@ -292,6 +301,44 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewCustomers(previousNotifications, true), false);
   assert.equal(reviewCustomers(previousWorkspace, true), false);
   assert.equal(reviewCustomers(importInventory.owners['crm-customers'], true), false);
+  const salesHook = fs.readFileSync(new URL('./crm-sales-reminder-fk-migration.mjs', import.meta.url), 'utf8');
+  const declaredMigrations = salesHook.match(/const migrations = \[([\s\S]*?)\n\];/)?.[1];
+  assert(declaredMigrations, 'CRM Sales reminder FK hook inventory missing');
+  const hookMigrations = Object.fromEntries([...declaredMigrations.matchAll(/\['([^']+)', '([a-f0-9]{64})'\]/g)]
+    .map(([, name, checksum]) => [name, checksum]));
+  assert.deepEqual(hookMigrations, salesReminderFkInventory.migrations,
+    'CRM Sales reminder FK guard and hook migration inventories differ');
+  assert.equal(salesHook.match(/const aclSha256 = '([a-f0-9]{64})';/)?.[1],
+    salesReminderFkInventory.aclSha256, 'CRM Sales reminder FK guard and hook ACL hashes differ');
+  const salesPairs = [closureInventory.owners['crm-sales'], importInventory.owners['crm-sales'],
+    plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales'],
+    meeting3Inventory.owners['crm-sales'], salesReminderFkInventory];
+  const reviewSales = (pair, { changedMigration = false, missingMigration = false,
+    changedAcl = false, extraMigration = false } = {}) => {
+    let calls = 0;
+    const result = closureImageReviewed('crm-sales', 'd'.repeat(40), (_label, executable, args) => {
+      calls++;
+      assert.equal(executable, 'docker');
+      if (calls === 1) return 'd'.repeat(40);
+      const script = args.at(-1);
+      assert(script.includes(salesReminderFkMigration));
+      assert(script.includes(salesReminderFkInventory.migrations[salesReminderFkMigration]));
+      return JSON.stringify({ migrations: !changedMigration && !missingMigration, inventoryIndex: extraMigration
+        ? salesPairs.length : salesPairs.indexOf(pair),
+      aclSha: changedAcl ? '0'.repeat(64) : pair.aclSha256 });
+    });
+    assert.equal(calls, 2);
+    return result;
+  };
+  assert.equal(Object.keys(salesReminderFkInventory.migrations).length, 8);
+  assert.equal(reviewSales(meeting3Inventory.owners['crm-sales']), true,
+    'The reviewed seven-migration Sales image remains available for rollback');
+  assert.equal(reviewSales(salesReminderFkInventory), true,
+    'The reviewed eight-migration Sales image supports the additive FK');
+  assert.equal(reviewSales(salesReminderFkInventory, { changedMigration: true }), false);
+  assert.equal(reviewSales(salesReminderFkInventory, { missingMigration: true }), false);
+  assert.equal(reviewSales(salesReminderFkInventory, { changedAcl: true }), false);
+  assert.equal(reviewSales(salesReminderFkInventory, { extraMigration: true }), false);
   const accessPairs = [closureInventory.owners['crm-access'], uxInventory.owners['crm-access'],
     collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry, telegramEntry];
   const reviewAccess = (pair, { badChecksum = false, badAcl = false } = {}) => {
