@@ -84,6 +84,8 @@ jobs:
           test "$(docker version --format '{{.Server.Version}}')" = '29.8.1'
           compose_version=$(docker compose version --short)
           test "${compose_version#v}" = '5.5.1'
+      - name: Execute generated CRM reliability ACL on PostgreSQL 18
+        run: node --test scripts/crm-reliability-acl-postgres18.test.mjs
       - name: Verify Compose preserves unaffected containers
         env:
           REQUIRE_DOCKER_COMPOSE_TEST: 'true'

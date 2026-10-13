@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, validatePending,
   compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig,
-  reviewedStoragePendingAmendment, reviewedReliabilityPendingAmendment }
+  reviewedStoragePendingAmendment, reviewedReliabilityPendingAmendment,
+  reviewedReliabilityPostDdlAmendment }
   from './backend-release-state.mjs';
 import { auditedMessengerAttempt, isAuditedMessengerAttempt, auditedMessengerAttemptSql,
   validateCommittedStorageRecovery, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
@@ -69,6 +70,26 @@ function reliabilityRecoveryFixture() {
     liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
     runtimeVerified: true, readinessVerified: true, markersVerified: true,
     latestAttemptsAbsent: true, newSchemaAbsent: true };
+  return { pending, target, args };
+}
+
+function postDdlReliabilityRecoveryFixture() {
+  const previous = { ...state(sha('a'), '101'), envHash: '78e80594fd6a4f780dae4977235f40b5c4074bef8cc7bca90cc2fb206e6aaf55' };
+  const pinnedTarget = { ...state('c948a4446496a6d1b83c58f6add04b9f6725a789', '202'),
+    infraSha: '5cbb3be274cfa65e97cd2764af67d3de243b7ff2',
+    envHash: 'ddb802cce9ffbed372b06921738d652fa914d7134db4d451b2ab90dc8ed5b1cd' };
+  const pending = { schemaVersion: 1, target: pinnedTarget, previous, phase: 'switching' };
+  const target = { ...pinnedTarget, infraSha: sha('9') };
+  const args = { pending, originalPendingHash: 'ac5e900177425b8f167aaaf5391583f93677833c44f836af49f527d19bb8ca79',
+    canonical: structuredClone(previous), target, reliabilityInstall: true, reliabilityPhase: 'prepare',
+    reliabilityMigration: true, otherHooksDisabled: true, beforeHash: previous.envHash,
+    prepareHash: 'ddb802cce9ffbed372b06921738d652fa914d7134db4d451b2ab90dc8ed5b1cd',
+    bundleHash: '96db684d51d5f7e8c3c180ebaf2143baec979e10d2e08e71895918e6311782b3',
+    migrationEnvHash: 'ed9012223178503b5ecee557e175ff4b153ab62b68166ea9122254c00acd0134',
+    liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
+    runtimeVerified: true, readinessVerified: true, markersVerified: true,
+    ledgersComplete: true, schemaComplete: true, accessAclExact: true,
+    customersLegacyAclExact: true, parentEvidenceVerified: true };
   return { pending, target, args };
 }
 
@@ -239,6 +260,35 @@ test('reviewed reliability recovery rejects journal, migration, environment, man
     const args = structuredClone(fixture.args);
     mutate(args);
     assert.throws(() => reviewedReliabilityPendingAmendment(args));
+  }
+});
+
+test('reviewed post-DDL recovery permits only the pinned infra correction with complete parent and migration evidence', () => {
+  const { pending, target, args } = postDdlReliabilityRecoveryFixture();
+  assert.deepEqual(reviewedReliabilityPostDdlAmendment(args), { ...pending, target });
+});
+
+test('reviewed post-DDL recovery rejects broken parent chain, incomplete DDL proof, and runtime/config drift', () => {
+  const fixture = postDdlReliabilityRecoveryFixture();
+  const invalid = [
+    args => { args.originalPendingHash = hash('8'); },
+    args => { args.parentEvidenceVerified = false; },
+    args => { args.ledgersComplete = false; },
+    args => { args.schemaComplete = false; },
+    args => { args.accessAclExact = false; },
+    args => { args.customersLegacyAclExact = false; },
+    args => { args.liveEnvHash = hash('8'); },
+    args => { args.liveComposeHash = hash('8'); },
+    args => { args.reliabilityPhase = 'activate'; },
+    args => { args.runtimeVerified = false; },
+    args => { args.readinessVerified = false; },
+    args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '303' }) }; },
+    args => { args.target = { ...args.target, envHash: hash('8') }; },
+  ];
+  for (const mutate of invalid) {
+    const args = structuredClone(fixture.args);
+    mutate(args);
+    assert.throws(() => reviewedReliabilityPostDdlAmendment(args));
   }
 });
 

@@ -9,14 +9,16 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, uniformManifest, compositionDiff,
   imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig, reviewedStoragePendingAmendment,
-  reviewedReliabilityPendingAmendment } from './backend-release-state.mjs';
+  reviewedReliabilityPendingAmendment, reviewedReliabilityPostDdlAmendment } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { storageCopyOriginInfra, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
   validateCommittedStorageRecovery } from './backend-storage-prisma-recovery.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
 import { stageReliabilityEnvironment, validateReliabilityBundle } from './backend-reliability-env.mjs';
-import { amendReliabilityPending, validateReliabilityAmendedPending } from './backend-reliability-recovery.mjs';
+import { reliabilityRecoveryHash, postDdlRecoveryHash, amendReliabilityPending,
+  validateReliabilityAmendedPending, amendPostDdlReliabilityPending,
+  validatePostDdlAmendedPending } from './backend-reliability-recovery.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
 import { stageTelegramBusinessEnvironment } from './backend-telegram-business-env.mjs';
 import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences, privateStorageUser } from './backend-runtime-storage-env.mjs';
@@ -162,7 +164,8 @@ function execute(label, command, commandArgs, options = {}) {
     return execFileSync(command, commandArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 300_000, maxBuffer: 8 * 1024 * 1024, ...options }).trim();
   } catch (error) {
-    const safe = ['Reviewed crm-reliability-migration.mjs', 'Reviewed CRM reliability recovery absence'].includes(label) ?
+    const safe = ['Reviewed crm-reliability-migration.mjs', 'Reviewed CRM reliability recovery absence',
+      'Reviewed CRM reliability post-DDL recovery'].includes(label) ?
       /^CRM_RELIABILITY_FAILURE stage=(preflight|identity|image-inventory|migration-history|schema-absence|prisma-migrate|acl|postflight) service=(none|crm-access|crm-customers) category=(routine-execute-inventory|image-inventory|migration-history|private-command|assertion)$/m
         .exec(String(error.stderr ?? '')) : null;
     const suffix = safe ? `; stage=${safe[1]} service=${safe[2]} category=${safe[3]}` : '';
@@ -694,9 +697,6 @@ if (envInstall) {
 rolesForPlan(expectedEffectivePlan(target), true, true);
 if (pending && stateKey(pending.target) !== stateKey(target)) {
   if (reliabilityEnvInstall === 'true') {
-    // The original prepare reached only the signature inventory check. This
-    // amendment is pinned to its exact journal and verifies the untouched host
-    // before carrying a corrected infra commit into the normal transaction.
     const originalHash = digest(originalPendingBytes);
     verifyRuntime(previous); readiness(previous);
     const liveEnvHash = envHash(`${root}/env/backend`);
@@ -706,6 +706,19 @@ if (pending && stateKey(pending.target) !== stateKey(target)) {
       readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
       readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
       readMarker('backend-rollback-blocked.pending') === sha;
+    const receiptFields = { appSha: sha, beforeEnvHash: reliabilityBeforeHash,
+      prepareEnvHash: expectedEnvHash, bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash };
+    const validateLive = () => {
+      assert.equal(envHash(`${root}/env/backend`), liveEnvHash, 'Reliability live env changed during recovery proof');
+      assert.equal(composeHash(`${root}/compose`), liveComposeHash, 'Reliability live compose changed during recovery proof');
+      assert(readMarker('backend.sha') === previous.manifest.releaseSha &&
+        readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
+        readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
+        readMarker('backend-rollback-blocked.pending') === sha,
+      'Reliability markers changed during recovery proof');
+    };
+    if (originalHash === reliabilityRecoveryHash) {
+    // The first incident reached only image inventory and requires zero DDL.
     execute('Reviewed CRM reliability recovery absence', process.execPath,
       [`${stagedRoot}/scripts/crm-reliability-migration.mjs`, '--read-only-recovery-preflight', sha, reliabilityHash],
       { cwd: root });
@@ -718,17 +731,28 @@ if (pending && stateKey(pending.target) !== stateKey(target)) {
       liveEnvHash, liveComposeHash, runtimeVerified: true, readinessVerified: true, markersVerified,
       latestAttemptsAbsent: true, newSchemaAbsent: true });
     pending = amendReliabilityPending({ releases, pendingFile, stateFile, originalPendingBytes,
-      pending, amended, target, receiptFields: { appSha: sha, beforeEnvHash: reliabilityBeforeHash,
-        prepareEnvHash: expectedEnvHash, bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash },
-      validateLive: () => {
-        assert.equal(envHash(`${root}/env/backend`), liveEnvHash, 'Reliability live env changed during recovery proof');
-        assert.equal(composeHash(`${root}/compose`), liveComposeHash, 'Reliability live compose changed during recovery proof');
-        assert(readMarker('backend.sha') === previous.manifest.releaseSha &&
-          readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
-          readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
-          readMarker('backend-rollback-blocked.pending') === sha,
-        'Reliability markers changed during recovery proof');
-      } });
+      pending, amended, target, receiptFields, validateLive });
+    } else if (originalHash === postDdlRecoveryHash) {
+      validateReliabilityAmendedPending({ releases, pending, target: pending.target, receiptFields });
+      const postDdlPreflight = () => execute('Reviewed CRM reliability post-DDL recovery', process.execPath,
+        [`${stagedRoot}/scripts/crm-reliability-migration.mjs`,
+          '--read-only-post-ddl-recovery-preflight', sha, reliabilityHash], { cwd: root });
+      postDdlPreflight();
+      const amended = reviewedReliabilityPostDdlAmendment({ pending, originalPendingHash: originalHash,
+        canonical, target, reliabilityInstall: true, reliabilityPhase, reliabilityMigration: reliability === 'true',
+        otherHooksDisabled: flagPairs.slice(0, -1).every(([enabled]) => enabled === 'false') &&
+          !storageInstall && mailEnvInstall === 'false' && chatEnvInstall === 'false' &&
+          telegramEnvInstall === 'false', beforeHash: reliabilityBeforeHash, prepareHash: expectedEnvHash,
+        bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash,
+        liveEnvHash, liveComposeHash, runtimeVerified: true, readinessVerified: true, markersVerified,
+        ledgersComplete: true, schemaComplete: true, accessAclExact: true,
+        customersLegacyAclExact: true, parentEvidenceVerified: true });
+      pending = amendPostDdlReliabilityPending({ releases, pendingFile, stateFile,
+        originalPendingBytes, pending, amended, target, receiptFields,
+        validateLive: () => {
+          verifyRuntime(previous); readiness(previous); postDdlPreflight(); validateLive();
+        } });
+    } else throw new Error('Unreviewed reliability pending journal; fail closed');
   } else {
   assert(storageInstall, 'Pending provenance recovery requires storage installation');
   verifyRuntime(previous, null, true);
@@ -780,9 +804,12 @@ if (pending && stateKey(pending.target) !== stateKey(target)) {
 if (pending && reliabilityEnvInstall === 'true' && reliabilityPhase === 'prepare' &&
     sha === 'c948a4446496a6d1b83c58f6add04b9f6725a789' &&
     pending.target.infraSha !== 'c0751a293f18a282df282ea79810665d879b017e') {
-  validateReliabilityAmendedPending({ releases, pending, target,
-    receiptFields: { appSha: sha, beforeEnvHash: reliabilityBeforeHash,
-      prepareEnvHash: expectedEnvHash, bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash } });
+  const receiptFields = { appSha: sha, beforeEnvHash: reliabilityBeforeHash,
+    prepareEnvHash: expectedEnvHash, bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash };
+  if (['a81f47e3ff88fb36e86815b12ed88fbb0ad277e2',
+    '5cbb3be274cfa65e97cd2764af67d3de243b7ff2'].includes(pending.target.infraSha))
+    validateReliabilityAmendedPending({ releases, pending, target, receiptFields });
+  else validatePostDdlAmendedPending({ releases, pending, target, receiptFields });
 }
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 recoverRabbitmq(previous, pending ? target : null);

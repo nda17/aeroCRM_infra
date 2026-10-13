@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "service": "crm-customers",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "_prisma_migrations": [],
+    "contacts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "companies": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "customer_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "customer_activities": [
+      "SELECT",
+      "INSERT"
+    ],
+    "intake_operation_slots": [
+      "SELECT",
+      "INSERT"
+    ],
+    "intake_operation_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "export_audit": [
+      "SELECT",
+      "INSERT"
+    ],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_connections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_mailboxes": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_mailbox_grants": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_folders": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_contact_links": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_attachments": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_send_intents": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_jobs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_messages": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_send_attachments": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_audit": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_notifications": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_notification_reads": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "import_previews": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "import_bindings": [
+      "SELECT",
+      "INSERT"
+    ]
+  },
+  "sequences": {},
+  "types": [],
+  "routines": [
+    "notify_live_change",
+    "enforce_service_identity_integrity",
+    "workspace_closure_fence_immutable",
+    "assert_workspace_open",
+    "guard_workspace_business_write",
+    "mail_write_guard",
+    "import_preview_immutable",
+    "import_binding_immutable",
+    "rewrap_mail_credential"
+  ],
+  "routineExecute": [
+    "assert_workspace_open(uuid)",
+    "rewrap_mail_credential(uuid,integer,text,text,text)"
+  ]
+}

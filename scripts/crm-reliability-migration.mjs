@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { parseEnv } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { validateManifest, uniformManifest } from './backend-release-state.mjs';
 import { auditedMessengerAttempt, isAuditedMessengerAttempt } from './backend-storage-prisma-recovery.mjs';
 
@@ -23,10 +24,11 @@ const resolvedAccessBaseline = Object.freeze({
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const literal = value => `'${value.replaceAll("'", "''")}'`;
 const ident = value => { assert(/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)); return `"${value}"`; };
+const invokedDirectly = process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 let diagnosticStage = 'preflight';
 let diagnosticService = 'none';
 const diagnosticStep = (stage, service = 'none') => { diagnosticStage = stage; diagnosticService = service; };
-process.on('uncaughtException', error => {
+if (invokedDirectly) process.on('uncaughtException', error => {
   const category = /routine EXECUTE inventory differs/.test(error.message) ? 'routine-execute-inventory' :
     /image (?:migrations|ACL) differs/.test(error.message) ? 'image-inventory' :
     /migration (?:history|ordering|checksum|incomplete)/.test(error.message) ? 'migration-history' :
@@ -144,7 +146,7 @@ function imageInventory(identity, sha, manifest) {
   assert(!acl.columnPrivileges || Object.keys(acl.columnPrivileges).length === 0);
   return acl;
 }
-function aclSql(identity, acl, verifyOnly = false) {
+export function aclSql(identity, acl, verifyOnly = false) {
   const {schema,owner,runtime,backup} = identity;
   const statements = ['BEGIN;',"SET LOCAL lock_timeout='5s';","SET LOCAL statement_timeout='30s';",
     `REVOKE ALL ON ALL TABLES IN SCHEMA ${ident(schema)} FROM PUBLIC, ${ident(runtime)}, ${ident(backup)};`,
@@ -181,7 +183,7 @@ function aclSql(identity, acl, verifyOnly = false) {
     IF (SELECT coalesce(array_agg(c.relname::text ORDER BY c.relname::text),'{}'::text[]) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname=${literal(schema)} AND c.relkind='S') IS DISTINCT FROM ARRAY[${sequences.map(literal).join(',')}]::text[]
       THEN RAISE EXCEPTION 'CRM reliability sequence inventory differs'; END IF;
-    IF (SELECT array_agg(t.typname::text ORDER BY t.typname::text) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+    IF (SELECT coalesce(array_agg(t.typname::text ORDER BY t.typname::text),'{}'::text[]) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
       WHERE n.nspname=${literal(schema)} AND t.typtype='e') IS DISTINCT FROM ARRAY[${acl.types.slice().sort().map(literal).join(',')}]::text[]
       THEN RAISE EXCEPTION 'CRM reliability enum inventory differs'; END IF;
     IF (SELECT array_agg(DISTINCT p.proname::text ORDER BY p.proname::text) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -292,6 +294,7 @@ function migrate(identity, sha, acl) {
   diagnosticStep('postflight', identity.service);
   postflight(identity);
 }
+if (invokedDirectly) {
 if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(inventory.schemaVersion,1);
   assert.deepEqual(Object.keys(inventory.owners).sort(),services);
@@ -361,7 +364,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
 }
 assert.equal(process.platform,'linux','CRM reliability migrations must run on Linux target');
 assert.equal(fs.realpathSync('.'),'/opt/aerocrm','Run from /opt/aerocrm');
-const readOnlyMode = ['--read-only-preflight','--read-only-postflight','--read-only-recovery-preflight']
+const readOnlyMode = ['--read-only-preflight','--read-only-postflight','--read-only-recovery-preflight',
+  '--read-only-post-ddl-recovery-preflight']
   .includes(process.argv[2]) ? process.argv[2] : null;
 const [sha,envHash] = process.argv.slice(readOnlyMode ? 3 : 2);
 assert.equal(process.argv.length,readOnlyMode ? 5 : 4);
@@ -386,10 +390,37 @@ if (readOnlyMode) {
     psql(identity,aclSql(identity,acls[services.indexOf(identity.service)],true),false);
     postflight(identity);
   }
+  if (readOnlyMode === '--read-only-post-ddl-recovery-preflight') for (const identity of identities) {
+    diagnosticStep('migration-history', identity.service);
+    verifyRows(identity.service,migrationRows(identity),true);
+    diagnosticStep('postflight', identity.service);
+    postflight(identity);
+    diagnosticStep('acl', identity.service);
+    const acl = acls[services.indexOf(identity.service)];
+    if (identity.service === 'crm-access') {
+      psql(identity,`BEGIN READ ONLY; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s';
+        ${aclSql(identity,acl,true)} COMMIT;`,false);
+    } else {
+      const missing = 'rewrap_mail_credential(uuid,integer,text,text,text)';
+      assert.equal(acl.routineExecute.filter(value => value === missing).length,1,
+        'Customers post-DDL recovery requires the exact ungranted routine');
+      const legacy = { ...acl, routineExecute: acl.routineExecute.filter(value => value !== missing) };
+      const routine = psql(identity,`BEGIN READ ONLY; SET LOCAL lock_timeout='5s';
+        SET LOCAL statement_timeout='30s'; ${aclSql(identity,legacy,true)}
+        SELECT json_build_object('definer',p.prosecdef,
+          'searchPath', EXISTS (SELECT 1 FROM unnest(p.proconfig) setting
+            WHERE replace(setting,' ','')='search_path=pg_catalog,crm_customers'),
+          'booleanResult',pg_get_function_result(p.oid)='boolean')::text
+        FROM pg_proc p WHERE p.oid='crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)'::regprocedure;
+        COMMIT;`);
+      assert(Object.values(routine).every(Boolean), 'Customers post-DDL routine safety differs');
+    }
+  }
   console.log(`CRM reliability ${readOnlyMode.slice(12)} verified: ${services.join(', ')}`);
   process.exit(0);
 }
 for (const [index,identity] of identities.entries()) {
   migrate(identity,sha,acls[index]);
   console.log(`CRM reliability migration and ACL verified: ${identity.service}`);
+}
 }

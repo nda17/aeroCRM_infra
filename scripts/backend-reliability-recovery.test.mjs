@@ -5,8 +5,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { apps } from './backend-release-state.mjs';
-import { amendPendingWithEvidence, validateAmendedWithEvidence,
-  amendReliabilityPending, reliabilityRecoveryFiles } from './backend-reliability-recovery.mjs';
+import { amendPendingWithEvidence, amendChainedPendingWithEvidence,
+  validateAmendedWithEvidence, amendReliabilityPending,
+  amendPostDdlReliabilityPending, validatePostDdlAmendedPending,
+  reliabilityRecoveryFiles } from './backend-reliability-recovery.mjs';
 
 const sha = value => value.repeat(40);
 const hash = value => value.repeat(64);
@@ -107,8 +109,26 @@ test('canonical or pending drift between proof passes blocks CAS and preserves t
       driftFile === 'stateFile' ? /canonical state changed/ : /pending changed/);
     assert.deepEqual(fs.readFileSync(f.options.pendingFile),
       driftFile === 'pendingFile' ? changedBytes : f.originalPendingBytes);
-    assert(fs.existsSync(f.paths.archive));
-    assert(fs.existsSync(f.paths.receipt));
+    assert.equal(fs.existsSync(f.paths.archive), false);
+    assert.equal(fs.existsSync(f.paths.receipt), false);
+  }
+});
+
+test('canonical or pending drift in the final live callback is rechecked before CAS', t => {
+  for (const driftFile of ['stateFile', 'pendingFile']) {
+    const f = tempFiles(t);
+    const changedBytes = driftFile === 'stateFile'
+      ? Buffer.from(`${JSON.stringify({ ...f.pending.previous, envHash: hash('e') }, null, 2)}\n`)
+      : Buffer.from('{"externalChange":true}\n');
+    let checks = 0;
+    f.options.validateLive = () => {
+      checks += 1;
+      if (checks === 2) fs.writeFileSync(f.options[driftFile], changedBytes, { mode: 0o600 });
+    };
+    assert.throws(() => amendPendingWithEvidence(f.options, f.expectedHash),
+      driftFile === 'stateFile' ? /canonical state changed/ : /pending changed/);
+    assert.deepEqual(fs.readFileSync(f.options.pendingFile),
+      driftFile === 'pendingFile' ? changedBytes : f.originalPendingBytes);
   }
 });
 
@@ -147,9 +167,56 @@ test('retry refuses modified archive or receipt evidence before it changes the p
   }
 });
 
+test('post-DDL parent evidence is checked before IO and again at CAS, then retry completes with chained receipt', t => {
+  const f = tempFiles(t);
+  const evidenceFiles = { archive: path.join(f.options.releases, 'post-ddl.original.json'),
+    receipt: path.join(f.options.releases, 'post-ddl.receipt.json') };
+  const receiptBuilder = (original, target, fields, expectedHash) => Buffer.from(`${JSON.stringify({
+    parentEvidence: fields.parentEvidence, expectedHash,
+    previousStateKey: JSON.stringify(original.previous), targetInfraSha: target.infraSha
+  })}\n`);
+  let parentIsValid = true;
+  const validateParent = () => assert(parentIsValid, 'Parent evidence changed during retry');
+  const options = { ...f.options, receiptFields: { ...f.receiptFields, parentEvidence: 'synthetic-parent-proof' } };
+  let liveChecks = 0;
+  options.validateLive = () => {
+    liveChecks += 1;
+    if (liveChecks === 2) parentIsValid = false;
+  };
+
+  parentIsValid = false;
+  assert.throws(() => amendChainedPendingWithEvidence(options, f.expectedHash, validateParent,
+    evidenceFiles, receiptBuilder), /Parent evidence changed/);
+  assert.equal(fs.existsSync(evidenceFiles.archive), false);
+  parentIsValid = true;
+  assert.throws(() => amendChainedPendingWithEvidence(options, f.expectedHash, validateParent,
+    evidenceFiles, receiptBuilder), /Parent evidence changed/);
+  assert.deepEqual(fs.readFileSync(options.pendingFile), f.originalPendingBytes);
+  assert(fs.existsSync(evidenceFiles.archive));
+  assert(fs.existsSync(evidenceFiles.receipt));
+
+  parentIsValid = true;
+  options.validateLive = () => {};
+  assert.deepEqual(amendChainedPendingWithEvidence(options, f.expectedHash, validateParent,
+    evidenceFiles, receiptBuilder), f.amended);
+  assert.deepEqual(JSON.parse(fs.readFileSync(options.pendingFile, 'utf8')), f.amended);
+  assert.deepEqual(fs.readFileSync(evidenceFiles.archive), f.originalPendingBytes);
+  assert.match(fs.readFileSync(evidenceFiles.receipt, 'utf8'), /synthetic-parent-proof/);
+});
+
 test('production recovery wrapper remains pinned to the reviewed incident hash', t => {
   const f = tempFiles(t);
   assert.throws(() => amendReliabilityPending(f.options), /original journal hash differs/);
   assert.deepEqual(fs.readFileSync(f.options.pendingFile), f.originalPendingBytes);
   assert.equal(fs.existsSync(f.paths.archive), false);
+});
+
+test('production post-DDL wrappers reject synthetic state when pinned parent evidence is absent', t => {
+  const f = tempFiles(t);
+  assert.throws(() => amendPostDdlReliabilityPending(f.options));
+  assert.deepEqual(fs.readFileSync(f.options.pendingFile), f.originalPendingBytes);
+  assert.equal(fs.existsSync(path.join(f.options.releases,
+    'backend-release.pending.ac5e900177425b8f167aaaf5391583f93677833c44f836af49f527d19bb8ca79.original.json')), false);
+  assert.throws(() => validatePostDdlAmendedPending({ releases: f.options.releases,
+    pending: f.amended, target: f.target, receiptFields: f.receiptFields }));
 });

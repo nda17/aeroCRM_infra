@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "service": "crm-access",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "_prisma_migrations": [],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_workspace_closures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_workspace_access": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_workspace_branding": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_saved_views": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_workspace_members": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_custom_roles": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_employee_profiles": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_teams": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_member_teams": [
+      "SELECT",
+      "INSERT",
+      "DELETE"
+    ],
+    "crm_invitation_intents": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_admissions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_team_command_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_team_audit": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_team_outbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_team_deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_billing_capacity": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_billing_operations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_directory_entries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_chat_conversations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_chat_participants": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_chat_messages": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_chat_attachments": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "workspace_messenger_streams": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "workspace_messenger_entries": [
+      "SELECT",
+      "INSERT"
+    ],
+    "workspace_messenger_read_cursors": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_connect_sessions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_connections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_channels": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_dialogs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_messages": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_webhook_inbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ]
+  },
+  "sequences": {
+    "crm_admissions_position_seq": [
+      "SELECT",
+      "USAGE"
+    ]
+  },
+  "types": [
+    "CrmAccessLifecycle",
+    "CrmMemberRole"
+  ],
+  "routines": [
+    "is_valid_custom_role_permissions",
+    "reject_team_history_mutation",
+    "guard_billing_operation",
+    "guard_billing_capacity",
+    "enforce_service_identity_integrity",
+    "assert_workspace_open",
+    "guard_workspace_business",
+    "guard_workspace_intent",
+    "enforce_workspace_closure_fence",
+    "enforce_workspace_closure_operation",
+    "provision_workspace_collaboration",
+    "signal_workspace_collaboration",
+    "guard_chat_attachment",
+    "project_workspace_messenger_internal",
+    "guard_workspace_retention",
+    "guard_telegram_retention",
+    "retire_telegram_technical_data",
+    "claim_closed_chat_attachments",
+    "complete_closed_chat_attachment"
+  ],
+  "routineExecute": [
+    "is_valid_custom_role_permissions(text[])",
+    "assert_workspace_open(uuid)",
+    "retire_telegram_technical_data()",
+    "claim_closed_chat_attachments()",
+    "complete_closed_chat_attachment(uuid, uuid, integer)"
+  ]
+}
