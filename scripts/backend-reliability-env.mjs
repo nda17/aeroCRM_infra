@@ -37,6 +37,52 @@ function keyring(value, label) {
   return parsed;
 }
 
+// Shared by the operator's full renderer; an absent keyring keeps legacy Mail readable.
+// Once any active key is configured, all read keys and the unchanged legacy pair are required.
+export function reliabilityRoleEnvironmentFields(input, service, role) {
+  if (service === 'crm-access') {
+    if (!['api', 'telegram-worker'].includes(role)) return {};
+    const value = input.CRM_ACCESS_RETENTION_ENABLED ?? 'false';
+    check(['true', 'false'].includes(value), 'Invalid CRM_ACCESS_RETENTION_ENABLED');
+    return { CRM_ACCESS_RETENTION_ENABLED: value };
+  }
+  if (service !== 'crm-customers') return {};
+  check(['api', 'mail-sync', 'mail-send'].includes(role), 'Invalid CRM Customers role');
+  const legacyId = input.CRM_MAIL_CREDENTIAL_KEY_ID;
+  const legacyKey = input.CRM_MAIL_CREDENTIAL_KEY;
+  const enabled = input.CRM_MAIL_ENABLED === 'true';
+  const rotation = input.CRM_MAIL_KEY_ROTATION_ENABLED ?? 'false';
+  check(['true', 'false'].includes(rotation), 'Invalid CRM_MAIL_KEY_ROTATION_ENABLED');
+  const names = ['CRM_MAIL_CREDENTIAL_KEYRING', 'CRM_MAIL_CREDENTIAL_ACTIVE_KEY_ID',
+    'CRM_MAIL_HMAC_KEYRING', 'CRM_MAIL_HMAC_ACTIVE_KEY_ID'];
+  const hasNew = names.some(name => input[name] !== undefined);
+  const needsLegacy = enabled || rotation === 'true' || hasNew || legacyId !== undefined || legacyKey !== undefined;
+  if (needsLegacy) check(keyId(legacyId) && keyBytes(legacyKey), 'Mail legacy key is incomplete');
+  const result = { CRM_MAIL_KEY_ROTATION_ENABLED: rotation };
+  if (needsLegacy) Object.assign(result, { CRM_MAIL_CREDENTIAL_KEY_ID: legacyId,
+    CRM_MAIL_CREDENTIAL_KEY: legacyKey });
+  if (!hasNew) {
+    check(rotation === 'false', 'Mail rotation requires complete keyrings');
+    return result;
+  }
+  check(names.every(name => typeof input[name] === 'string' && input[name]),
+    'Mail keyrings and active IDs must be complete');
+  const aes = keyring(input.CRM_MAIL_CREDENTIAL_KEYRING, 'AES');
+  const hmac = keyring(input.CRM_MAIL_HMAC_KEYRING, 'HMAC');
+  check(aes[legacyId] === legacyKey && hmac[legacyId] === legacyKey,
+    'Mail keyrings must preserve the legacy key');
+  const aesId = input.CRM_MAIL_CREDENTIAL_ACTIVE_KEY_ID;
+  const hmacId = input.CRM_MAIL_HMAC_ACTIVE_KEY_ID;
+  check(keyId(aesId) && !!aes[aesId] && keyId(hmacId) && !!hmac[hmacId],
+    'Mail active IDs must exist in keyrings');
+  check(Object.entries(aes).every(([id, bytes]) => id === legacyId ||
+    Object.entries(hmac).every(([hmacKeyId, hmacBytes]) => hmacKeyId === legacyId || bytes !== hmacBytes)),
+    'New Mail AES and HMAC material must be independent');
+  if (rotation === 'true') check(enabled && aesId !== legacyId && hmacId !== legacyId && aesId !== hmacId,
+    'Mail rotation requires distinct new active IDs and enabled Mail');
+  return { ...result, ...Object.fromEntries(names.map(name => [name, input[name]])) };
+}
+
 function privateFile(file) {
   const stat = fs.lstatSync(file);
   check(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600 &&

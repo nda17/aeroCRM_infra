@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, validatePending,
   compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig,
-  reviewedStoragePendingAmendment }
+  reviewedStoragePendingAmendment, reviewedReliabilityPendingAmendment }
   from './backend-release-state.mjs';
 import { auditedMessengerAttempt, isAuditedMessengerAttempt, auditedMessengerAttemptSql,
   validateCommittedStorageRecovery, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
@@ -50,6 +50,26 @@ function storageRecoveryFixture() {
     storageBeforeHash: previous.envHash, liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
     markerPresent: false, chatMigrationAbsent: true, runtimeVerified: true };
   return { previous, target, pending, canonical, nextTarget, args };
+}
+
+function reliabilityRecoveryFixture() {
+  const previous = { ...state(sha('a'), '101'), envHash: '78e80594fd6a4f780dae4977235f40b5c4074bef8cc7bca90cc2fb206e6aaf55' };
+  const pinnedTarget = { ...state('c948a4446496a6d1b83c58f6add04b9f6725a789', '202'),
+    infraSha: 'c0751a293f18a282df282ea79810665d879b017e',
+    envHash: 'ddb802cce9ffbed372b06921738d652fa914d7134db4d451b2ab90dc8ed5b1cd' };
+  const pending = { schemaVersion: 1, target: pinnedTarget, previous, phase: 'switching' };
+  const target = { ...pinnedTarget, infraSha: sha('9') };
+  const canonical = structuredClone(previous);
+  const args = { pending, originalPendingHash: '3dbc2b3e76a9e333a744505ed4c0821fe734bd9d7bad69eef9676e66f6fa7ef4',
+    canonical, target, reliabilityInstall: true, reliabilityPhase: 'prepare', reliabilityMigration: true,
+    otherHooksDisabled: true, beforeHash: previous.envHash,
+    prepareHash: 'ddb802cce9ffbed372b06921738d652fa914d7134db4d451b2ab90dc8ed5b1cd',
+    bundleHash: '96db684d51d5f7e8c3c180ebaf2143baec979e10d2e08e71895918e6311782b3',
+    migrationEnvHash: 'ed9012223178503b5ecee557e175ff4b153ab62b68166ea9122254c00acd0134',
+    liveEnvHash: previous.envHash, liveComposeHash: previous.composeHash,
+    runtimeVerified: true, readinessVerified: true, markersVerified: true,
+    latestAttemptsAbsent: true, newSchemaAbsent: true };
+  return { pending, target, args };
 }
 
 function committedStorageRecoveryFixture() {
@@ -195,6 +215,30 @@ test('reviewed storage recovery rejects marker, migration/DDL, applied target, a
     const args = structuredClone(fixture.args);
     mutate(args);
     assert.throws(() => reviewedStoragePendingAmendment(args));
+  }
+});
+
+test('reviewed reliability recovery permits only the pinned infra provenance correction', () => {
+  const { pending, target, args } = reliabilityRecoveryFixture();
+  assert.deepEqual(reviewedReliabilityPendingAmendment(args), { ...pending, target });
+});
+
+test('reviewed reliability recovery rejects journal, migration, environment, manifest, phase, and runtime drift', () => {
+  const fixture = reliabilityRecoveryFixture();
+  const invalid = [
+    args => { args.originalPendingHash = hash('8'); },
+    args => { args.latestAttemptsAbsent = false; },
+    args => { args.liveEnvHash = hash('8'); },
+    args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '303' }) }; },
+    args => { args.target = { ...args.target, composeHash: hash('8') }; },
+    args => { args.reliabilityPhase = 'activate'; },
+    args => { args.runtimeVerified = false; },
+    args => { args.readinessVerified = false; },
+  ];
+  for (const mutate of invalid) {
+    const args = structuredClone(fixture.args);
+    mutate(args);
+    assert.throws(() => reviewedReliabilityPendingAmendment(args));
   }
 });
 

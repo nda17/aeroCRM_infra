@@ -38,6 +38,8 @@ jobs:
           node --check scripts/backend-telegram-business-env.mjs
           node --check scripts/telegram-business-migration.mjs
           node --check scripts/backend-reliability-env.mjs
+          node --check scripts/backend-reliability-recovery.mjs
+          node --check scripts/render-env.mjs
           node --check scripts/crm-reliability-migration.mjs
           node --check scripts/reliability-s3-probe.mjs
           node --check scripts/telegram-business-webhook.mjs
@@ -46,7 +48,7 @@ jobs:
           python3 scripts/telegram-business-relay.test.py
           node --check scripts/runtime-storage-copy.cjs
           node --check scripts/chat-storage-probe.cjs
-          node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs scripts/backend-mail-env.test.mjs scripts/backend-chat-env.test.mjs scripts/backend-runtime-storage-env.test.mjs scripts/backend-telegram-business-env.test.mjs scripts/runtime-storage-copy.test.cjs scripts/chat-storage-probe.test.cjs
+          node --test scripts/backend-release-state.test.mjs scripts/backend-release-transaction.test.mjs scripts/backend-mail-env.test.mjs scripts/backend-chat-env.test.mjs scripts/backend-runtime-storage-env.test.mjs scripts/backend-telegram-business-env.test.mjs scripts/backend-reliability-recovery.test.mjs scripts/render-env.test.mjs scripts/runtime-storage-copy.test.cjs scripts/chat-storage-probe.test.cjs
           node --test scripts/backend-release-rabbitmq-config.test.mjs
           node --test scripts/backend-image-cleanup.test.mjs
           bash scripts/release.sh --policy-self-test

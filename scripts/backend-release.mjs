@@ -8,13 +8,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, uniformManifest, compositionDiff,
-  imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig, reviewedStoragePendingAmendment } from './backend-release-state.mjs';
+  imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig, reviewedStoragePendingAmendment,
+  reviewedReliabilityPendingAmendment } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { storageCopyOriginInfra, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
   validateCommittedStorageRecovery } from './backend-storage-prisma-recovery.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
 import { stageReliabilityEnvironment, validateReliabilityBundle } from './backend-reliability-env.mjs';
+import { amendReliabilityPending, validateReliabilityAmendedPending } from './backend-reliability-recovery.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
 import { stageTelegramBusinessEnvironment } from './backend-telegram-business-env.mjs';
 import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences, privateStorageUser } from './backend-runtime-storage-env.mjs';
@@ -160,7 +162,11 @@ function execute(label, command, commandArgs, options = {}) {
     return execFileSync(command, commandArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 300_000, maxBuffer: 8 * 1024 * 1024, ...options }).trim();
   } catch (error) {
-    const failure = new Error(`${label} failed; private command output suppressed`);
+    const safe = ['Reviewed crm-reliability-migration.mjs', 'Reviewed CRM reliability recovery absence'].includes(label) ?
+      /^CRM_RELIABILITY_FAILURE stage=(preflight|identity|image-inventory|migration-history|schema-absence|prisma-migrate|acl|postflight) service=(none|crm-access|crm-customers) category=(routine-execute-inventory|image-inventory|migration-history|private-command|assertion)$/m
+        .exec(String(error.stderr ?? '')) : null;
+    const suffix = safe ? `; stage=${safe[1]} service=${safe[2]} category=${safe[3]}` : '';
+    const failure = new Error(`${label} failed${suffix}; private command output suppressed`);
     failure.status = error.status; throw failure;
   }
 }
@@ -687,6 +693,43 @@ if (envInstall) {
 } else snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
 rolesForPlan(expectedEffectivePlan(target), true, true);
 if (pending && stateKey(pending.target) !== stateKey(target)) {
+  if (reliabilityEnvInstall === 'true') {
+    // The original prepare reached only the signature inventory check. This
+    // amendment is pinned to its exact journal and verifies the untouched host
+    // before carrying a corrected infra commit into the normal transaction.
+    const originalHash = digest(originalPendingBytes);
+    verifyRuntime(previous); readiness(previous);
+    const liveEnvHash = envHash(`${root}/env/backend`);
+    const liveComposeHash = composeHash(`${root}/compose`);
+    const markersVerified = previous.closure.enabled === true &&
+      readMarker('backend.sha') === previous.manifest.releaseSha &&
+      readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
+      readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
+      readMarker('backend-rollback-blocked.pending') === sha;
+    execute('Reviewed CRM reliability recovery absence', process.execPath,
+      [`${stagedRoot}/scripts/crm-reliability-migration.mjs`, '--read-only-recovery-preflight', sha, reliabilityHash],
+      { cwd: root });
+    const amended = reviewedReliabilityPendingAmendment({ pending, originalPendingHash: originalHash,
+      canonical, target, reliabilityInstall: true, reliabilityPhase, reliabilityMigration: reliability === 'true',
+      otherHooksDisabled: flagPairs.slice(0, -1).every(([enabled]) => enabled === 'false') &&
+        !storageInstall && mailEnvInstall === 'false' && chatEnvInstall === 'false' &&
+        telegramEnvInstall === 'false', beforeHash: reliabilityBeforeHash, prepareHash: expectedEnvHash,
+      bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash,
+      liveEnvHash, liveComposeHash, runtimeVerified: true, readinessVerified: true, markersVerified,
+      latestAttemptsAbsent: true, newSchemaAbsent: true });
+    pending = amendReliabilityPending({ releases, pendingFile, stateFile, originalPendingBytes,
+      pending, amended, target, receiptFields: { appSha: sha, beforeEnvHash: reliabilityBeforeHash,
+        prepareEnvHash: expectedEnvHash, bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash },
+      validateLive: () => {
+        assert.equal(envHash(`${root}/env/backend`), liveEnvHash, 'Reliability live env changed during recovery proof');
+        assert.equal(composeHash(`${root}/compose`), liveComposeHash, 'Reliability live compose changed during recovery proof');
+        assert(readMarker('backend.sha') === previous.manifest.releaseSha &&
+          readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
+          readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
+          readMarker('backend-rollback-blocked.pending') === sha,
+        'Reliability markers changed during recovery proof');
+      } });
+  } else {
   assert(storageInstall, 'Pending provenance recovery requires storage installation');
   verifyRuntime(previous, null, true);
   if (fs.existsSync(storageMarker)) {
@@ -732,6 +775,14 @@ if (pending && stateKey(pending.target) !== stateKey(target)) {
   writeJson(pendingFile, amended);
   pending = amended;
   }
+  }
+}
+if (pending && reliabilityEnvInstall === 'true' && reliabilityPhase === 'prepare' &&
+    sha === 'c948a4446496a6d1b83c58f6add04b9f6725a789' &&
+    pending.target.infraSha !== 'c0751a293f18a282df282ea79810665d879b017e') {
+  validateReliabilityAmendedPending({ releases, pending, target,
+    receiptFields: { appSha: sha, beforeEnvHash: reliabilityBeforeHash,
+      prepareEnvHash: expectedEnvHash, bundleHash: reliabilityBundleHash, migrationEnvHash: reliabilityHash } });
 }
 if (pending) assert.deepEqual(pending.target, target, 'Pending target config or provenance differs; fail closed');
 recoverRabbitmq(previous, pending ? target : null);

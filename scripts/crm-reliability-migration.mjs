@@ -23,6 +23,17 @@ const resolvedAccessBaseline = Object.freeze({
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const literal = value => `'${value.replaceAll("'", "''")}'`;
 const ident = value => { assert(/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)); return `"${value}"`; };
+let diagnosticStage = 'preflight';
+let diagnosticService = 'none';
+const diagnosticStep = (stage, service = 'none') => { diagnosticStage = stage; diagnosticService = service; };
+process.on('uncaughtException', error => {
+  const category = /routine EXECUTE inventory differs/.test(error.message) ? 'routine-execute-inventory' :
+    /image (?:migrations|ACL) differs/.test(error.message) ? 'image-inventory' :
+    /migration (?:history|ordering|checksum|incomplete)/.test(error.message) ? 'migration-history' :
+    /failed; private command output suppressed/.test(error.message) ? 'private-command' : 'assertion';
+  console.error(`CRM_RELIABILITY_FAILURE stage=${diagnosticStage} service=${diagnosticService} category=${category}`);
+  process.exitCode = 1;
+});
 
 function execute(label, binary, args, options = {}) {
   try {
@@ -102,6 +113,10 @@ function verifyRows(service, rows, complete = false) {
       `${service} migration incomplete or rolled back`);
   });
 }
+function verifyRoutineExecuteInventory(acl, expected) {
+  assert.deepEqual((acl.routineExecute || []).slice().sort(), expected.routineExecute.slice().sort(),
+    'CRM reliability routine EXECUTE inventory differs');
+}
 function imageInventory(identity, sha, manifest) {
   const image = `aerocrm/${identity.service}:${sha}`;
   assert.equal(execute(`${identity.service} image ID`, 'docker', ['image','inspect','--format','{{.Id}}',image]),
@@ -125,7 +140,7 @@ function imageInventory(identity, sha, manifest) {
   assert.deepEqual(acl.sequences,expected.sequences);
   assert.deepEqual(acl.types.slice().sort(),expected.types);
   assert.deepEqual(acl.routines.slice().sort(),expected.routines);
-  assert.deepEqual((acl.routineExecute||[]).slice().sort(),expected.routineExecute);
+  verifyRoutineExecuteInventory(acl, expected);
   assert(!acl.columnPrivileges || Object.keys(acl.columnPrivileges).length === 0);
   return acl;
 }
@@ -235,14 +250,46 @@ function postflight(identity) {
       'rewrapGuard', EXISTS (SELECT 1 FROM pg_proc WHERE oid='crm_customers.mail_write_guard()'::regprocedure AND NOT prosecdef))::text;`);
   assert(Object.values(state).every(Boolean), `${identity.service} reliability schema guards differ`);
 }
+function recoveryAbsence(identity) {
+  const isAccess = identity.service === 'crm-access';
+  const objects = isAccess ? `
+    (SELECT count(*) FROM information_schema.columns WHERE table_schema='crm_access' AND
+      (table_name,column_name) IN (('telegram_webhook_inbox','payload_purged_at'),
+      ('telegram_connect_sessions','payload_purged_at'))) +
+    (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='crm_access'
+      AND p.proname IN ('guard_workspace_retention','guard_telegram_retention',
+      'retire_telegram_technical_data','claim_closed_chat_attachments','complete_closed_chat_attachment')) +
+    (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='crm_access'
+      AND c.relname IN ('telegram_inbox_retention_idx','telegram_session_retention_idx')) +
+    (SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='crm_access' AND t.tgname='telegram_retention_guard')`
+    : `
+    (SELECT count(*) FROM information_schema.columns WHERE table_schema='crm_customers' AND
+      (table_name,column_name) IN (('mail_commands','request_hash_key_id'),
+      ('mail_send_intents','request_hash_key_id'))) +
+    (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='crm_customers'
+      AND p.proname='rewrap_mail_credential') +
+    (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='crm_customers'
+      AND c.relname='mail_connections_rewrap_idx')`;
+  const result = psql(identity, `BEGIN READ ONLY; SELECT json_build_object(
+    'latestAttempts', (SELECT count(*) FROM ${ident(identity.schema)}._prisma_migrations
+      WHERE migration_name=${literal(reviewed(identity.service).migration)}),
+    'newObjects', ${objects})::text; COMMIT;`);
+  assert.equal(result.latestAttempts, 0, `${identity.service} latest migration attempt already exists`);
+  assert.equal(result.newObjects, 0, `${identity.service} reliability schema objects already exist`);
+}
 function migrate(identity, sha, acl) {
   const image = `aerocrm/${identity.service}:${sha}`;
+  diagnosticStep('prisma-migrate', identity.service);
   execute(`${identity.service} Prisma CRM reliability migration`, 'docker', [
     'run','--rm','--network','host','--env','NODE_ENV','--env',identity.key,
     '--entrypoint','node',image,'node_modules/prisma/build/index.js','migrate','deploy',
     '--schema','prisma/schema.prisma'], {env:{...process.env,...identity.values}});
+  diagnosticStep('migration-history', identity.service);
   verifyRows(identity.service,migrationRows(identity),true);
+  diagnosticStep('acl', identity.service);
   psql(identity,aclSql(identity,acl),false);
+  diagnosticStep('postflight', identity.service);
   postflight(identity);
 }
 if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
@@ -250,6 +297,28 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.deepEqual(Object.keys(inventory.owners).sort(),services);
   for (const service of services) {
     const entry = reviewed(service);
+    verifyRoutineExecuteInventory(
+      { routineExecute: [...entry.routineExecute].reverse() },
+      entry,
+    );
+    assert.throws(
+      () =>
+        verifyRoutineExecuteInventory(
+          { routineExecute: entry.routineExecute.slice(0, -1) },
+          entry,
+        ),
+      /routine EXECUTE inventory differs/,
+    );
+    assert.throws(
+      () =>
+        verifyRoutineExecuteInventory(
+          {
+            routineExecute: [...entry.routineExecute, "unexpected_fixture(text)"],
+          },
+          entry,
+        ),
+      /routine EXECUTE inventory differs/,
+    );
     const expected = Object.entries(entry.migrations);
     const row = ([migration_name,checksum]) => ({migration_name,checksum,finished:true,rolled_back:false});
     verifyRows(service,expected.slice(0,-1).map(row));
@@ -292,19 +361,26 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
 }
 assert.equal(process.platform,'linux','CRM reliability migrations must run on Linux target');
 assert.equal(fs.realpathSync('.'),'/opt/aerocrm','Run from /opt/aerocrm');
-const readOnlyMode = ['--read-only-preflight','--read-only-postflight'].includes(process.argv[2]) ? process.argv[2] : null;
+const readOnlyMode = ['--read-only-preflight','--read-only-postflight','--read-only-recovery-preflight']
+  .includes(process.argv[2]) ? process.argv[2] : null;
 const [sha,envHash] = process.argv.slice(readOnlyMode ? 3 : 2);
 assert.equal(process.argv.length,readOnlyMode ? 5 : 4);
 assert(/^[a-f0-9]{40}$/.test(sha) && /^[a-f0-9]{64}$/.test(envHash));
 const manifest = validateManifest(JSON.parse(fs.readFileSync(process.env.BACKEND_MANIFEST_PATH,'utf8')));
 assert.equal(manifest.releaseSha,sha);
 assert(uniformManifest(manifest),'CRM reliability migration requires full exact-SHA backend manifest');
-const identities = services.map(privateIdentity);
+const identities = services.map(service => { diagnosticStep('identity', service); return privateIdentity(service); });
 verifyMigrationEnvHash(identities,envHash);
 // Every owner is checked before the first DDL; a rerun may find one applied and the other pending.
-const acls = identities.map(identity => imageInventory(identity,sha,manifest));
-identities.forEach(identity => verifyRows(identity.service,migrationRows(identity)));
+const acls = identities.map(identity => { diagnosticStep('image-inventory', identity.service);
+  return imageInventory(identity,sha,manifest); });
+identities.forEach(identity => { diagnosticStep('migration-history', identity.service);
+  verifyRows(identity.service,migrationRows(identity)); });
 if (readOnlyMode) {
+  if (readOnlyMode === '--read-only-recovery-preflight') for (const identity of identities) {
+    diagnosticStep('schema-absence', identity.service);
+    recoveryAbsence(identity);
+  }
   if (readOnlyMode === '--read-only-postflight') for (const identity of identities) {
     verifyRows(identity.service,migrationRows(identity),true);
     psql(identity,aclSql(identity,acls[services.indexOf(identity.service)],true),false);

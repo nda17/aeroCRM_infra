@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { reliabilityRoleEnvironmentFields } from './backend-reliability-env.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const input = parseEnv(fs.readFileSync(path.join(root, '.env'), 'utf8'));
@@ -185,7 +186,7 @@ for (const [service, role, port, explicit] of roles) {
         CRM_MAIL_SEND_ENABLED: booleanInput('CRM_MAIL_SEND_ENABLED')
       });
     // Mail credentials are independent of existing notification SMTP/Support S3.
-    for (const key of ['CRM_MAIL_CREDENTIAL_KEY_ID', 'CRM_MAIL_CREDENTIAL_KEY', 'CRM_MAIL_S3_ENDPOINT',
+    for (const key of ['CRM_MAIL_S3_ENDPOINT',
       'CRM_MAIL_S3_REGION', 'CRM_MAIL_S3_BUCKET', 'CRM_MAIL_S3_ACCESS_KEY_ID',
       'CRM_MAIL_S3_SECRET_ACCESS_KEY', 'CRM_MAIL_S3_FORCE_PATH_STYLE'])
       if (input[key]?.trim()) env[key] = input[key];
@@ -193,6 +194,7 @@ for (const [service, role, port, explicit] of roles) {
   if (service === 'crm-sales') Object.assign(env, base('CRM_ACCESS'), base('CRM_CUSTOMERS'), base('NOTIFICATION_DELIVERY'), tokens([
     'CRM_ACCESS_CRM_SALES_TOKEN', 'CRM_CUSTOMERS_CRM_SALES_TOKEN', 'CRM_SALES_CRM_ACCESS_TOKEN', 'CRM_SALES_CRM_INTAKE_TOKEN',
     'CRM_SALES_NOTIFICATION_DELIVERY_TOKEN', 'NOTIFICATION_DELIVERY_CRM_SALES_TOKEN']), { CRM_TASK_REMINDERS_ENABLED: 'true' });
+  Object.assign(env, reliabilityRoleEnvironmentFields(input, service, role));
   write(`backend/${runtime}.env`, env);
 }
 const routes = [

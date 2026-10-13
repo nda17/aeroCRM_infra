@@ -100,6 +100,36 @@ export function reviewedStoragePendingAmendment({ pending, canonical, target, st
   assert.equal(liveComposeHash, pending.previous.composeHash, 'Pending amendment live compose changed');
   return { ...pending, target };
 }
+// One prepare-only incident: the reviewed ACL signature inventory check sorted
+// one side of an exact comparison. No schema or runtime mutation reached the host.
+export function reviewedReliabilityPendingAmendment({ pending, originalPendingHash, canonical, target,
+  reliabilityInstall, reliabilityPhase, reliabilityMigration, otherHooksDisabled,
+  beforeHash, prepareHash, bundleHash, migrationEnvHash, liveEnvHash, liveComposeHash,
+  runtimeVerified, readinessVerified, markersVerified, latestAttemptsAbsent, newSchemaAbsent }) {
+  validatePending(pending, canonical); validateState(target);
+  assert.equal(originalPendingHash, '3dbc2b3e76a9e333a744505ed4c0821fe734bd9d7bad69eef9676e66f6fa7ef4',
+    'Reliability recovery requires the exact failed journal');
+  assert.equal(pending.target.infraSha, 'c0751a293f18a282df282ea79810665d879b017e',
+    'Reliability recovery requires the exact failed infra');
+  assert.equal(pending.target.manifest.releaseSha, 'c948a4446496a6d1b83c58f6add04b9f6725a789',
+    'Reliability recovery requires the exact application');
+  assert.notEqual(target.infraSha, pending.target.infraSha, 'Reliability recovery requires corrected infra');
+  assert(isDeepStrictEqual(target, { ...pending.target, infraSha: target.infraSha }),
+    'Reliability recovery may change only infra provenance');
+  assert(isDeepStrictEqual(canonical, pending.previous), 'Reliability recovery requires unchanged canonical state');
+  assert.equal(reliabilityInstall, true); assert.equal(reliabilityPhase, 'prepare');
+  assert.equal(reliabilityMigration, true); assert.equal(otherHooksDisabled, true);
+  assert.equal(beforeHash, '78e80594fd6a4f780dae4977235f40b5c4074bef8cc7bca90cc2fb206e6aaf55');
+  assert.equal(prepareHash, 'ddb802cce9ffbed372b06921738d652fa914d7134db4d451b2ab90dc8ed5b1cd');
+  assert.equal(bundleHash, '96db684d51d5f7e8c3c180ebaf2143baec979e10d2e08e71895918e6311782b3');
+  assert.equal(migrationEnvHash, 'ed9012223178503b5ecee557e175ff4b153ab62b68166ea9122254c00acd0134');
+  assert.equal(pending.previous.envHash, beforeHash); assert.equal(pending.target.envHash, prepareHash);
+  assert.equal(liveEnvHash, beforeHash); assert.equal(liveComposeHash, pending.previous.composeHash);
+  assert.equal(runtimeVerified, true); assert.equal(readinessVerified, true);
+  assert.equal(markersVerified, true); assert.equal(latestAttemptsAbsent, true);
+  assert.equal(newSchemaAbsent, true);
+  return { ...pending, target };
+}
 export function compositionDiff(previous, target) {
   validateManifest(target); if (previous) validateManifest(previous);
   return apps.filter(app => !previous || previous.services[app].imageId !== target.services[app].imageId ||

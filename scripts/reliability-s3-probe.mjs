@@ -94,6 +94,19 @@ async function backupProbe(client, sdk) {
       Key: `__denied__/${randomUUID()}` })));
     await expectDenied(() => client.send(new sdk.ListObjectsV2Command({ Bucket: 'content-files',
       Prefix: 'aerocrm/android/', MaxKeys: 1 })));
+    for (const objectKey of [Key, multipartKey]) {
+      await client.send(new sdk.DeleteObjectCommand({ Bucket, Key: objectKey }));
+      let absent = false;
+      for (let attempt = 0; attempt < 6 && !absent; attempt++) {
+        try { await client.send(new sdk.HeadObjectCommand({ Bucket, Key: objectKey })); }
+        catch (error) {
+          assert.equal(error.$metadata?.httpStatusCode, 404, 'Backup deletion readback failed');
+          absent = true;
+        }
+        if (!absent && attempt < 5) await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      assert(absent, 'Backup deletion left a readable synthetic object');
+    }
   } finally {
     if (uploadId) await client.send(new sdk.AbortMultipartUploadCommand({ Bucket, Key: multipartKey,
       UploadId: uploadId })).catch(() => {});
