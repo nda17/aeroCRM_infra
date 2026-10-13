@@ -264,6 +264,10 @@ assert(ledger.uid === 1001 && ledger.gid === 1001 && (ledger.mode & 0o777) === 0
 const jobsFile = `${stage}/jobs.json`;
 fs.writeFileSync(jobsFile, `${JSON.stringify(jobs)}\n`, { flag: 'wx', mode: 0o600 });
 prepareOwnership(image, jobsFile, '/jobs.json');
+const envHash = command('Backend environment hash', 'bash', ['-c',
+  'cd "$1"; find . -maxdepth 1 -type f -name "*.env" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1',
+  '_', `${root}/env/backend`]);
+assert(envHash === state.envHash, 'Backend environment changed before isolated rehearsal');
 const result = isolatedClone(image, jobsFile, ledgerDir);
 console.log(JSON.stringify({ schemaVersion: 1, sourceRevision: operationsRevision,
   sourceClusterSystemIdentifier: inventory.clusterSystemIdentifier,
