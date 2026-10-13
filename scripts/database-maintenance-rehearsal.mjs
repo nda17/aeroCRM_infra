@@ -2,7 +2,7 @@
 // Fresh signed backups from the reviewed runtime, followed by an isolated PG18 rehearsal.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import { apps, assertRuntime, imageVariables, portsForPlan, rolesForPlan, valida
 const root = '/opt/aerocrm';
 const sha = /^[a-f0-9]{40}$/;
 const stagePrefix = `${root}/releases/staging/maintenance-rehearsal-`;
+const pendingFile = `${root}/releases/database-maintenance-rehearsal.pending.json`;
 const [mode, stage, infraSha, ciRunId, operationsRevision] = process.argv.slice(2);
 const targetNames = apps.filter(name => name !== 'api-gateway').sort();
 let interruptionSignal;
@@ -33,6 +34,32 @@ function privateFile(file) {
   assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600 &&
     fs.realpathSync(file) === file, 'Expected private regular file with mode 0600');
   return fs.readFileSync(file, 'utf8');
+}
+function marker(runtime, inventory) {
+  return { schemaVersion: 1, infraSha, ciRunId, operationsRevision,
+    stateSha256: createHash('sha256').update(privateFile(`${root}/releases/backend-state.json`)).digest('hex'),
+    sourceClusterSystemIdentifier: inventory.clusterSystemIdentifier,
+    containers: runtime.containers.map(({ role, id, imageId, revision }) => ({ role, id, imageId, revision }))
+      .sort((left, right) => left.role.localeCompare(right.role)) };
+}
+function syncDirectory(directory) {
+  const descriptor = fs.openSync(directory, 'r');
+  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+}
+function savePending(value) {
+  assert(!fs.lstatSync(pendingFile, { throwIfNoEntry: false }), 'Resolve previous writer stop first');
+  const temporary = `${pendingFile}.tmp-${process.pid}-${randomUUID()}`;
+  const descriptor = fs.openSync(temporary, 'wx', 0o600);
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(value)}\n`);
+    fs.fsyncSync(descriptor);
+  } finally { fs.closeSync(descriptor); }
+  fs.renameSync(temporary, pendingFile);
+  syncDirectory(path.dirname(pendingFile));
+}
+function clearPending() {
+  fs.unlinkSync(pendingFile);
+  syncDirectory(path.dirname(pendingFile));
 }
 function prepareOwnership(image, source, destination, directory = false) {
   command('Prepare private rehearsal bind', 'docker', ['run', '--rm', '--network', 'none',
@@ -83,6 +110,15 @@ function restartWriters(manifest, original, ports) {
   assert(canonicalRuntime(manifest).containers.every(container => container.running),
     'Backend writers did not all restart');
   verifyReadiness(ports);
+}
+function recoverPending(state, runtime, inventory) {
+  if (!fs.lstatSync(pendingFile, { throwIfNoEntry: false })) return;
+  const saved = JSON.parse(privateFile(pendingFile));
+  assert.deepEqual(saved, marker(runtime, inventory),
+    'Pending writer receipt differs from canonical runtime or source cluster');
+  restartWriters(state.manifest, runtime.containers, runtime.ports);
+  clearPending();
+  console.error('Recovered exact reviewed writers from durable rehearsal receipt');
 }
 function isolatedClone(image, jobsFile, ledgerDir) {
   const name = `aerocrm-maintenance-rehearsal-${path.basename(stage).slice(22)}`;
@@ -158,6 +194,14 @@ const imageObject = JSON.parse(command('Operations image inspection', 'docker', 
 assert(imageObject.Id === state.manifest.services.operations.imageId &&
   imageObject.Config.Labels?.['org.opencontainers.image.revision'] === operationsRevision,
   'Operations image differs from canonical backend state');
+const inventory = maintenance(request('inventory', { schemaVersion: 1, action: 'inventory',
+  expectedRevision: operationsRevision }));
+assert(inventory.schemaVersion === 1 && inventory.revision === operationsRevision &&
+  /^\d{10,30}$/.test(inventory.clusterSystemIdentifier ?? '') &&
+  Array.isArray(inventory.targets) && inventory.targets.length === 12, 'Source maintenance inventory differs');
+assert.deepEqual(inventory.targets.map(target => target.target).sort(), targetNames,
+  'Source inventory does not cover exactly the twelve reviewed owners');
+recoverPending(state, canonicalRuntime(state.manifest), inventory);
 const original = canonicalRuntime(state.manifest);
 assert(original.containers.every(container => container.running), 'All backend writers must be running before rehearsal');
 verifyReadiness(original.ports);
@@ -170,16 +214,10 @@ await new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(15439, '127.0.0.1', () => server.close(resolve));
 });
-const inventory = maintenance(request('inventory', { schemaVersion: 1, action: 'inventory',
-  expectedRevision: operationsRevision }));
-assert(inventory.schemaVersion === 1 && inventory.revision === operationsRevision &&
-  /^\d{10,30}$/.test(inventory.clusterSystemIdentifier ?? '') &&
-  Array.isArray(inventory.targets) && inventory.targets.length === 12, 'Source maintenance inventory differs');
-assert.deepEqual(inventory.targets.map(target => target.target).sort(), targetNames,
-  'Source inventory does not cover exactly the twelve reviewed owners');
 const jobs = { schemaVersion: 1, sourceClusterSystemIdentifier: inventory.clusterSystemIdentifier, targets: {} };
 let backupError;
 try {
+  savePending(marker(original, inventory));
   command('Stop reviewed backend writers for consistent backup set', 'docker', ['stop', '-t', '60',
     ...original.containers.map(container => container.id)], { timeout: 300_000 });
   const stopped = canonicalRuntime(state.manifest);
@@ -196,7 +234,12 @@ try {
   }
   checkInterrupted();
 } catch (error) { backupError = error; }
-finally { restartWriters(state.manifest, original.containers, original.ports); }
+finally {
+  if (fs.lstatSync(pendingFile, { throwIfNoEntry: false })) {
+    restartWriters(state.manifest, original.containers, original.ports);
+    clearPending();
+  }
+}
 if (backupError) throw backupError;
 checkInterrupted();
 const ledgerDir = `${root}/maintenance/rehearsals/${path.basename(stage)}`;

@@ -147,6 +147,9 @@ assert(!process.env.DATABASE_MAINTENANCE_REHEARSAL_CLUSTER, 'Production runner c
 assert(fs.realpathSync(requestFile).startsWith(`${root}/releases/staging/maintenance-`),
   'Request must belong to private maintenance stage');
 const input = request(JSON.parse(privateFile(requestFile)));
+if (['restore', 'rollback'].includes(input.action))
+  assert(!fs.lstatSync(`${root}/releases/database-maintenance-rehearsal.pending.json`, { throwIfNoEntry: false }),
+    'Recover pending rehearsal writers before a restore or rollback');
 assert(fs.statSync(requestFile).size <= 16 * 1024, 'Maintenance request exceeds 16 KiB');
 assert(!fs.existsSync(`${root}/releases/backend-release.pending.json`) &&
   !fs.existsSync(`${root}/releases/crm-contract-cutover.pending`) &&

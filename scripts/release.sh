@@ -231,6 +231,9 @@ fi
 cd /opt/aerocrm
 exec 9>release.lock
 flock -n 9 || { echo 'Another aeroCRM release is active' >&2; exit 1; }
+[[ ! -e releases/database-maintenance-rehearsal.pending.json && ! -L releases/database-maintenance-rehearsal.pending.json ]] || {
+  echo 'Recover pending database maintenance rehearsal writers before a release' >&2; exit 1;
+}
 [[ ! -f releases/crm-contract-cutover.pending ]] || { echo 'CRM contract cutover pending; resume its guarded workflow before an ordinary release' >&2; exit 1; }
 rollback_pending=$(cat releases/backend-rollback-blocked.pending 2>/dev/null || true)
 [[ -z "$rollback_pending" || "$rollback_pending" =~ ^[a-f0-9]{40}$ ]] || exit 1

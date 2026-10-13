@@ -129,6 +129,8 @@ const envBeforeHash = storageInstall ? storageBeforeHash : chatEnvInstall === 't
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
 fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
+assert(!fs.lstatSync(`${releases}/database-maintenance-rehearsal.pending.json`, { throwIfNoEntry: false }),
+  'Recover pending database maintenance rehearsal writers before a backend release');
 assert(!fs.existsSync(`${releases}/crm-contract-cutover.pending`), 'Resolve pending CRM contract cutover first');
 const blocked = readMarker('backend-rollback-blocked.pending');
 assert(!blocked || blocked === sha, 'Repeat the exact target SHA to recover a blocked rollback');
