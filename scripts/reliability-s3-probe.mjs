@@ -53,7 +53,11 @@ async function expectDenied(operation) {
   }
   throw new Error('S3 negative probe was unexpectedly authorized');
 }
-async function backupProbe(client, sdk) {
+function deletedObjectsAbsent(list, keys) {
+  return list.$metadata?.httpStatusCode === 200 && list.IsTruncated === false &&
+    keys.every(key => !(list.Contents ?? []).some(item => item.Key === key));
+}
+async function backupProbe(client, sdk, setStage) {
   const Bucket = 'backup-services';
   const prefix = `database-backups/__capability_probe__/${randomUUID()}/`;
   const Key = `${prefix}small.bin`;
@@ -94,19 +98,20 @@ async function backupProbe(client, sdk) {
       Key: `__denied__/${randomUUID()}` })));
     await expectDenied(() => client.send(new sdk.ListObjectsV2Command({ Bucket: 'content-files',
       Prefix: 'aerocrm/android/', MaxKeys: 1 })));
+    setStage('backup-delete');
     for (const objectKey of [Key, multipartKey]) {
-      await client.send(new sdk.DeleteObjectCommand({ Bucket, Key: objectKey }));
-      let absent = false;
-      for (let attempt = 0; attempt < 6 && !absent; attempt++) {
-        try { await client.send(new sdk.HeadObjectCommand({ Bucket, Key: objectKey })); }
-        catch (error) {
-          assert.equal(error.$metadata?.httpStatusCode, 404, 'Backup deletion readback failed');
-          absent = true;
-        }
-        if (!absent && attempt < 5) await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      assert(absent, 'Backup deletion left a readable synthetic object');
+      const deleted = await client.send(new sdk.DeleteObjectCommand({ Bucket, Key: objectKey }));
+      assert(deleted.$metadata?.httpStatusCode >= 200 && deleted.$metadata?.httpStatusCode < 300,
+        'Backup synthetic DELETE did not succeed');
     }
+    setStage('backup-delete-readback');
+    let absent = false;
+    for (let attempt = 0; attempt < 6 && !absent; attempt++) {
+      const list = await client.send(new sdk.ListObjectsV2Command({ Bucket, Prefix: prefix, MaxKeys: 10 }));
+      absent = deletedObjectsAbsent(list, [Key, multipartKey]);
+      if (!absent && attempt < 5) await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    assert(absent, 'Backup deletion left a synthetic object in the scoped prefix');
   } finally {
     if (uploadId) await client.send(new sdk.AbortMultipartUploadCommand({ Bucket, Key: multipartKey,
       UploadId: uploadId })).catch(() => {});
@@ -145,6 +150,12 @@ async function apkProbe(client, sdk, values) {
 if (mode === '--policy-self-test') {
   assert(denied({ $metadata: { httpStatusCode: 403 } }));
   assert(!denied({ $metadata: { httpStatusCode: 404 } }));
+  assert(deletedObjectsAbsent({ $metadata: { httpStatusCode: 200 }, IsTruncated: false,
+    Contents: [] }, ['small.bin', 'multipart.bin']));
+  assert(!deletedObjectsAbsent({ $metadata: { httpStatusCode: 200 }, IsTruncated: false,
+    Contents: [{ Key: 'small.bin' }] }, ['small.bin', 'multipart.bin']));
+  assert(!deletedObjectsAbsent({ $metadata: { httpStatusCode: 200 }, IsTruncated: true,
+    Contents: [] }, ['small.bin', 'multipart.bin']));
   const policies = JSON.parse(fs.readFileSync(new URL('./reliability-s3-policies.json', import.meta.url)));
   assert.deepEqual(policies.map(item => [item.name, item.bucket, item.prefix]), [
     ['aerocrm-backup-only', 'backup-services', 'database-backups/'],
@@ -162,6 +173,7 @@ if (mode === '--policy-self-test') {
     Resource: 'arn:aws:s3:::content-files/aerocrm/android/*' }]);
   console.log('Reliability S3 probe policy fixtures verified');
 } else if (mode === '--probe') {
+  let stage = 'bundle-validation';
   try {
     assert.equal(process.argv.length, 8, 'Expected SDK package, prepare bundle/hash and APK bundle/hash');
     const sdk = createRequire(path.resolve(sdkPackage))('@aws-sdk/client-s3');
@@ -179,13 +191,21 @@ if (mode === '--policy-self-test') {
     const apkClient = provider(Object.fromEntries(Object.entries(apk).map(([key, value]) =>
       [`ANDROID_APK_S3_${key}`, value])), 'ANDROID_APK_S3', sdk);
     try {
-      await backupProbe(backupClient, sdk);
+      stage = 'backup-capability';
+      await backupProbe(backupClient, sdk, value => { stage = value; });
+      stage = 'apk-capability';
       const apkProbeKey = await apkProbe(apkClient, sdk, apk);
       console.log(JSON.stringify({ backup: 'verified', apk: 'verified', apkProbeKey,
         backupPrefix: 'backup-services/database-backups/', apkPrefix: 'content-files/aerocrm/android/',
         credentialsWithheld: true }));
     } finally { backupClient.destroy(); apkClient.destroy(); }
-  } catch { console.error('Reliability S3 capability probe failed; provider details and credentials withheld'); process.exitCode = 1; }
+  } catch (error) {
+    const status = error?.$metadata?.httpStatusCode;
+    console.error(`Reliability S3 capability probe failed at ${stage}; HTTP ${
+      Number.isInteger(status) && status >= 100 && status <= 599 ? status : 'unknown'
+    }; provider details and credentials withheld`);
+    process.exitCode = 1;
+  }
 } else {
   console.error('Expected --probe or --policy-self-test');
   process.exitCode = 1;
