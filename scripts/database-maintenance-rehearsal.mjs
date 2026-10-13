@@ -6,6 +6,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
+import { parseEnv } from 'node:util';
 import { apps, assertRuntime, imageVariables, portsForPlan, rolesForPlan, validateState } from './backend-release-state.mjs';
 
 const root = '/opt/aerocrm';
@@ -34,6 +35,14 @@ function privateFile(file) {
   assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600 &&
     fs.realpathSync(file) === file, 'Expected private regular file with mode 0600');
   return fs.readFileSync(file, 'utf8');
+}
+function workerEnvironment() {
+  let values;
+  try { values = parseEnv(privateFile(`${root}/env/backend/operations-worker.env`)); }
+  catch { throw new Error('Private Operations worker environment is invalid'); }
+  assert(Object.keys(values).every(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)),
+    'Private Operations worker environment contains an invalid key');
+  return values;
 }
 function marker(runtime, inventory) {
   return { schemaVersion: 1, infraSha, ciRunId, operationsRevision,
@@ -125,6 +134,14 @@ function isolatedClone(image, jobsFile, ledgerDir) {
   assert(/^[a-zA-Z0-9_.-]{1,100}$/.test(name));
   const password = randomBytes(24).toString('hex');
   const adminUrl = `postgresql://aerocrm_cluster_admin:${password}@127.0.0.1:15439/postgres`;
+  const workerValues = workerEnvironment();
+  const overrides = { APP_REVISION: operationsRevision, DATABASE_MAINTENANCE_TEST_SOURCE: 'real-s3',
+    DATABASE_MAINTENANCE_TEST_ADMIN_URL: adminUrl,
+    DATABASE_MAINTENANCE_TEST_APPS_DIR: '/source/aeroCRM_services/apps',
+    DATABASE_MAINTENANCE_TEST_JOBS_FILE: '/run/restore/jobs.json',
+    DATABASE_MAINTENANCE_TEST_LEDGER_DIR: '/run/restore/ledger',
+    DATABASE_MAINTENANCE_ACTOR: process.env.DATABASE_MAINTENANCE_ACTOR };
+  const names = Object.keys({ ...workerValues, ...overrides }).sort();
   const source = `${stage}/source`;
   assert(fs.statSync(`${source}/aeroCRM_services/apps/operations/test/integration/database-maintenance-all-targets-postgres18.integration.mjs`).isFile(),
     'Reviewed source rehearsal script is missing');
@@ -143,17 +160,13 @@ function isolatedClone(image, jobsFile, ledgerDir) {
       command('Wait for isolated PostgreSQL', 'sleep', ['2']);
     }
     const summary = command('All-target real-S3 restore rehearsal', 'docker', ['run', '--rm', '--network', 'host',
-      '--user', '1001:1001', '--entrypoint', 'node', '--env-file', `${root}/env/backend/operations-worker.env`,
-      '--env', 'APP_REVISION', '--env', 'DATABASE_MAINTENANCE_TEST_SOURCE=real-s3',
-      '--env', 'DATABASE_MAINTENANCE_TEST_ADMIN_URL', '--env', 'DATABASE_MAINTENANCE_TEST_APPS_DIR=/source/aeroCRM_services/apps',
-      '--env', 'DATABASE_MAINTENANCE_TEST_JOBS_FILE=/run/restore/jobs.json',
-      '--env', 'DATABASE_MAINTENANCE_TEST_LEDGER_DIR=/run/restore/ledger', '--env', 'DATABASE_MAINTENANCE_ACTOR',
+      '--user', '1001:1001', '--entrypoint', 'node', ...names.flatMap(name => ['--env', name]),
       '--mount', `type=bind,src=${source},dst=/source,readonly`,
       '--mount', `type=bind,src=${jobsFile},dst=/run/restore/jobs.json,readonly`,
       '--mount', `type=bind,src=${ledgerDir},dst=/run/restore/ledger`,
       image, '/source/aeroCRM_services/apps/operations/test/integration/database-maintenance-all-targets-postgres18.integration.mjs'],
     { timeout: 4 * 60 * 60 * 1000,
-      env: { ...process.env, APP_REVISION: operationsRevision, DATABASE_MAINTENANCE_TEST_ADMIN_URL: adminUrl } });
+      env: { ...process.env, ...workerValues, ...overrides } });
     checkInterrupted();
     const result = JSON.parse(summary.split('\n').at(-1));
     assert(result.schemaVersion === 1 && result.source === 'real-s3' &&

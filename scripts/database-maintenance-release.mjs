@@ -52,6 +52,14 @@ function privateFile(file) {
     fs.realpathSync(file) === file, 'Expected private regular file with mode 0600');
   return fs.readFileSync(file, 'utf8');
 }
+function workerEnvironment() {
+  let values;
+  try { values = parseEnv(privateFile(`${root}/env/backend/operations-worker.env`)); }
+  catch { throw new Error('Private Operations worker environment is invalid'); }
+  assert(Object.keys(values).every(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)),
+    'Private Operations worker environment contains an invalid key');
+  return values;
+}
 function prepareOperationsOwnership(image, source, destination, directory = false) {
   command('Prepare private Operations maintenance bind', 'docker', ['run', '--rm', '--network', 'none',
     '--user', '0:0', '--entrypoint', '/bin/sh',
@@ -98,17 +106,19 @@ function request(value) {
   return value;
 }
 function maintenance(image, requestPath, revision, adminUrl) {
+  const values = workerEnvironment();
+  const overrides = { APP_REVISION: revision, DATABASE_MAINTENANCE_ADMIN_URL: adminUrl,
+    DATABASE_MAINTENANCE_ACTOR: process.env.DATABASE_MAINTENANCE_ACTOR,
+    DATABASE_MAINTENANCE_LEDGER_DIR: '/run/restore/ledger' };
+  const names = Object.keys({ ...values, ...overrides }).sort();
   const result = command('Operations maintenance CLI', 'docker', ['run', '--rm', '--network', 'host',
-    '--user', '0:0', '--env-file', `${root}/env/backend/operations-worker.env`,
-    '--env', 'APP_REVISION', '--env', 'DATABASE_MAINTENANCE_ADMIN_URL',
-    '--env', 'DATABASE_MAINTENANCE_ACTOR', '--env', 'DATABASE_MAINTENANCE_LEDGER_DIR=/run/restore/ledger',
+    '--user', '0:0', ...names.flatMap(name => ['--env', name]),
     '--mount', `type=bind,src=${ledgerDir},dst=/run/restore/ledger`,
     '--mount', `type=bind,src=${requestPath},dst=/run/restore/request.json,readonly`,
     '--mount', `type=bind,src=${root}/secrets/database-backup-provenance-private-key.pem,dst=/run/secrets/database-backup-provenance-private-key-source,readonly`,
     image, 'node', 'dist/src/maintenance/database-maintenance.cli.js', '--request', '/run/restore/request.json'], {
     timeout: 2 * 60 * 60 * 1000,
-    env: { ...process.env, APP_REVISION: revision, DATABASE_MAINTENANCE_ADMIN_URL: adminUrl,
-      DATABASE_MAINTENANCE_ACTOR: process.env.DATABASE_MAINTENANCE_ACTOR }
+    env: { ...process.env, ...values, ...overrides }
   });
   return JSON.parse(result);
 }
@@ -173,7 +183,7 @@ assert(imageObject.Id === state.manifest.services.operations.imageId &&
   imageObject.Config.Labels?.['org.opencontainers.image.revision'] === input.expectedRevision,
   'Operations image identity differs from canonical backend state');
 const postgres = parseEnv(privateFile(`${root}/env/backend/postgres.env`));
-privateFile(`${root}/env/backend/operations-worker.env`);
+workerEnvironment();
 assert(Object.keys(postgres).sort().join() === ['POSTGRES_DB', 'POSTGRES_PASSWORD', 'POSTGRES_USER'].sort().join() &&
   postgres.POSTGRES_USER === 'aerocrm_cluster_admin' && postgres.POSTGRES_DB === 'postgres' &&
   !!postgres.POSTGRES_PASSWORD, 'Private PostgreSQL admin environment differs');
