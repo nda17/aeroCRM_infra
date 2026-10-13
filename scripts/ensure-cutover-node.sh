@@ -13,6 +13,8 @@ case "${1:-}" in
   --billing) checked_scripts=(billing-capacity-migration.mjs) ;;
   --crm-custom-roles) checked_scripts=(crm-custom-roles-migration.mjs) ;;
   --crm-sales-commerce) checked_scripts=(crm-sales-commerce-migration.mjs) ;;
+  --crm-sales-reminder-fk) checked_scripts=(crm-sales-reminder-fk-migration.mjs) ;;
+  --database-maintenance) checked_scripts=(database-maintenance-release.mjs backend-release-state.mjs) ;;
   --crm-corporate-mail) checked_scripts=(crm-corporate-mail-migration.mjs) ;;
   --crm-file-imports) checked_scripts=(crm-file-imports-migration.mjs) ;;
   --crm-planner-customization) checked_scripts=(crm-planner-customization-migration.mjs) ;;

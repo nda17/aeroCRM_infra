@@ -59,13 +59,16 @@ crm_meeting3_migration=${26:-false}
 crm_meeting3_migration_env_hash=${27:-}
 crm_telegram_business_migration=${28:-false}
 crm_telegram_business_migration_env_hash=${29:-}
-[[ $# -le 29 ]] || exit 64
+crm_sales_reminder_fk_migration=${30:-false}
+crm_sales_reminder_fk_migration_env_hash=${31:-}
+[[ $# -le 31 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
 [[ "$billing_capacity_migration" == true || "$billing_capacity_migration" == false ]] || exit 64
 [[ "$crm_custom_roles_migration" == true || "$crm_custom_roles_migration" == false ]] || exit 64
 [[ "$crm_sales_commerce_migration" == true || "$crm_sales_commerce_migration" == false ]] || exit 64
+[[ "$crm_sales_reminder_fk_migration" == true || "$crm_sales_reminder_fk_migration" == false ]] || exit 64
 [[ "$crm_intake_notifications_migration" == true || "$crm_intake_notifications_migration" == false ]] || exit 64
 [[ "$workspace_closure_migration" == true || "$workspace_closure_migration" == false ]] || exit 64
 [[ "$workspace_closure_identity_acl_repair" == true || "$workspace_closure_identity_acl_repair" == false ]] || exit 64
@@ -171,6 +174,18 @@ if [[ "$crm_telegram_business_migration" == true ]]; then
 else
   [[ "$crm_telegram_business_migration" == false && -z "$crm_telegram_business_migration_env_hash" ]] || exit 64
 fi
+if [[ "$crm_sales_reminder_fk_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_sales_reminder_fk_migration_env_hash" =~ ^[a-f0-9]{64}$ &&
+    "$billing_capacity_migration" == false && "$crm_custom_roles_migration" == false &&
+    "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
+    "$crm_corporate_mail_migration" == false && "$crm_file_imports_migration" == false &&
+    "$crm_planner_customization_migration" == false && "$crm_ux_unification_migration" == false &&
+    "$crm_workspace_collaboration_migration" == false && "$crm_meeting3_migration" == false &&
+    "$crm_telegram_business_migration" == false && "$workspace_closure_migration" == false &&
+    "$workspace_closure_identity_acl_repair" == false ]] || exit 64
+else
+  [[ -z "$crm_sales_reminder_fk_migration_env_hash" ]] || exit 64
+fi
 # The staged backend controller acquires the shared lock before any configuration mutation.
 if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
   node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node
@@ -179,6 +194,10 @@ if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
 fi
 if [[ "$crm_corporate_mail_migration" == true ]]; then
   echo 'Corporate mail migration requires the full canonical backend manifest controller' >&2
+  exit 1
+fi
+if [[ "$crm_sales_reminder_fk_migration" == true ]]; then
+  echo 'CRM Sales reminder FK migration requires the full canonical backend manifest controller' >&2
   exit 1
 fi
 if [[ "$crm_file_imports_migration" == true ]]; then

@@ -35,14 +35,14 @@ args.shift();
 const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
   commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
   closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = '',
-  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = '', meeting3 = 'false', meeting3Hash = '', telegram = 'false', telegramHash = ''] = args;
+  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = '', meeting3 = 'false', meeting3Hash = '', telegram = 'false', telegramHash = '', reminderFk = 'false', reminderFkHash = ''] = args;
 assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
 assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
 assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
 assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
-assert(args.length >= 3 && args.length <= 29, 'Invalid backend release argument count');
+assert(args.length >= 3 && args.length <= 31, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
-  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash], [meeting3, meeting3Hash], [telegram, telegramHash]];
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash], [meeting3, meeting3Hash], [telegram, telegramHash], [reminderFk, reminderFkHash]];
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
@@ -77,7 +77,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -121,6 +121,9 @@ const storageRecoveryFile = `${releases}/runtime-storage-prisma-recovery.json`;
 const storageBundleFile = `${stagedRoot}/runtime-storage-env.json`;
 const storageManifestFile = `${stagedRoot}/storage-manifest.json`;
 const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true' || telegramEnvInstall === 'true' || storageInstall;
+if (reminderFk === 'true')
+  assert(flags.filter(value => value === 'true').length === 1 && !envInstall,
+    'CRM Sales reminder FK migration must be an isolated full-manifest release');
 const envBeforeHash = storageInstall ? storageBeforeHash : chatEnvInstall === 'true' ? chatEnvBeforeHash :
   telegramEnvInstall === 'true' ? telegramEnvBeforeHash : mailEnvBeforeHash;
 assert(!migrationRequested || uniformManifest(manifest),
@@ -566,7 +569,8 @@ function runMigrations() {
     ['crm-planner-customization-migration.mjs', planner, plannerHash],
     ['crm-ux-unification-migration.mjs', ux, uxHash],
     ['workspace-collaboration-migration.mjs', collaboration, collaborationHash], ['meeting3-migration.mjs', meeting3, meeting3Hash],
-    ['telegram-business-migration.mjs', telegram, telegramHash]];
+    ['telegram-business-migration.mjs', telegram, telegramHash],
+    ['crm-sales-reminder-fk-migration.mjs', reminderFk, reminderFkHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
