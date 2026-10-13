@@ -10,6 +10,7 @@ const services = ['crm-access', 'crm-customers'];
 const token = randomBytes(6).toString('hex');
 const container = `crm-acl-pg18-${token}`;
 let port;
+let postgresPassword;
 
 const ident = value => {
   assert.match(value, /^[A-Za-z_][A-Za-z0-9_]*$/);
@@ -22,7 +23,8 @@ function docker(args, options = {}) {
 }
 
 function psql(database, sql, expectedSuccess = true, expectedError = null) {
-  const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1',
+  const result = spawnSync('docker', ['exec', '-i', '-e', `PGPASSWORD=${postgresPassword}`,
+    container, 'psql', '-h', '127.0.0.1', '-X', '-v', 'ON_ERROR_STOP=1',
     '-U', 'postgres', '-d', database], { input: sql, encoding: 'utf8', timeout: 30_000,
     maxBuffer: 4 * 1024 * 1024 });
   if (expectedSuccess) assert.equal(result.status, 0,
@@ -84,18 +86,20 @@ function fixtureObjectsSql(service, acl) {
 }
 
 before(async () => {
-  const password = randomBytes(24).toString('base64url');
-  docker(['run', '--detach', '--rm', '--name', container, '--env', `POSTGRES_PASSWORD=${password}`,
+  postgresPassword = randomBytes(24).toString('base64url');
+  docker(['run', '--detach', '--rm', '--name', container, '--env', `POSTGRES_PASSWORD=${postgresPassword}`,
     '--publish', '127.0.0.1::5432', 'postgres:18']);
   const mapping = docker(['port', container, '5432/tcp']);
   port = Number(mapping.match(/:(\d+)$/)?.[1]);
   assert(Number.isInteger(port) && port > 0, 'PG18 container did not expose an ephemeral localhost port');
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const result = spawnSync('docker', ['exec', container, 'pg_isready', '-U', 'postgres'],
+    const result = spawnSync('docker', ['exec', '-e', `PGPASSWORD=${postgresPassword}`,
+      container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
       { encoding: 'utf8', timeout: 2_000 });
     if (result.status === 0) {
-      const connection = spawnSync('docker', ['exec', container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1',
+      const connection = spawnSync('docker', ['exec', '-e', `PGPASSWORD=${postgresPassword}`,
+        container, 'psql', '-h', '127.0.0.1', '-X', '-v', 'ON_ERROR_STOP=1',
         '-U', 'postgres', '-d', 'postgres', '-Atc', 'SELECT 1'],
       { encoding: 'utf8', timeout: 2_000 });
       if (connection.status === 0 && connection.stdout.trim() === '1') { ready = true; break; }
@@ -110,7 +114,7 @@ after(() => {
 });
 
 for (const service of services) {
-test(`${service} generated ACL SQL applies, verifies, and rejects unreviewed ACL state on PostgreSQL 18`, () => {
+  test(`${service} generated ACL SQL applies, verifies, and rejects unreviewed ACL state on PostgreSQL 18`, () => {
     const acl = aclFor(service);
     const identity = fixtureObjectsSql(service, acl);
     psql(identity.database, `SET ROLE ${ident(identity.owner)};\n${aclSql(identity, acl)}`);
