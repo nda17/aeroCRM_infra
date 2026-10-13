@@ -68,6 +68,11 @@ function maintenance(requestFile) {
     [`${stage}/scripts/database-maintenance-release.mjs`, '--locked', requestFile, infraSha, ciRunId],
     { timeout: 2 * 60 * 60 * 1000 }));
 }
+function verifyReadiness(ports) {
+  for (const port of ports) command(`Backend readiness ${port}`, 'curl', ['--fail', '--silent',
+    '--show-error', '--retry', '20', '--retry-delay', '3', '--retry-connrefused', '--connect-timeout', '2',
+    '--max-time', '5', '--retry-max-time', '90', `http://127.0.0.1:${port}/health/ready`], { timeout: 100_000 });
+}
 function restartWriters(manifest, original, ports) {
   const current = canonicalRuntime(manifest);
   const originalIds = original.map(container => container.id).sort();
@@ -77,9 +82,7 @@ function restartWriters(manifest, original, ports) {
   if (stopped.length) command('Restart reviewed writers', 'docker', ['start', ...stopped]);
   assert(canonicalRuntime(manifest).containers.every(container => container.running),
     'Backend writers did not all restart');
-  for (const port of ports) command(`Backend readiness ${port}`, 'curl', ['--fail', '--silent',
-    '--show-error', '--retry', '20', '--retry-delay', '3', '--retry-connrefused', '--connect-timeout', '2',
-    '--max-time', '5', '--retry-max-time', '90', `http://127.0.0.1:${port}/health/ready`], { timeout: 100_000 });
+  verifyReadiness(ports);
 }
 function isolatedClone(image, jobsFile, ledgerDir) {
   const name = `aerocrm-maintenance-rehearsal-${path.basename(stage).slice(22)}`;
@@ -122,7 +125,8 @@ function isolatedClone(image, jobsFile, ledgerDir) {
       result.targets.every(target => target.phase === 'COMMITTED'), 'All-target rehearsal summary differs');
     return result;
   } finally {
-    command('Remove isolated PostgreSQL 18', 'docker', ['stop', '-t', '60', name], { timeout: 120_000 });
+    if (spawnSync('docker', ['container', 'inspect', name], { stdio: 'ignore' }).status === 0)
+      command('Remove isolated PostgreSQL 18', 'docker', ['stop', '-t', '60', name], { timeout: 120_000 });
   }
 }
 
@@ -156,6 +160,7 @@ assert(imageObject.Id === state.manifest.services.operations.imageId &&
   'Operations image differs from canonical backend state');
 const original = canonicalRuntime(state.manifest);
 assert(original.containers.every(container => container.running), 'All backend writers must be running before rehearsal');
+verifyReadiness(original.ports);
 if (spawnSync('docker', ['image', 'inspect', 'postgres:18'], { stdio: 'ignore' }).status !== 0)
   command('Pull isolated PostgreSQL 18 image before writer stop', 'docker', ['pull', 'postgres:18'], { timeout: 600_000 });
 assert(/^postgres \(PostgreSQL\) 18\./.test(command('Isolated PostgreSQL version', 'docker',
