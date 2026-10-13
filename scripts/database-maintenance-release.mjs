@@ -44,7 +44,7 @@ function runtime(manifest) {
     running: container.State.Running
   }));
   assertRuntime(manifest, containers, null, true, expectedRoles);
-  return { containers, expectedRoles, ports: portsForPlan(compose) };
+  return { containers, expectedRoles, ports: portsForPlan(compose.services) };
 }
 function privateFile(file) {
   const stat = fs.lstatSync(file);

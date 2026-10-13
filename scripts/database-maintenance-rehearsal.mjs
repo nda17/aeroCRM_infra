@@ -92,7 +92,7 @@ function canonicalRuntime(manifest) {
       revision: container.Config.Env.find(value => value.startsWith('APP_REVISION='))?.slice(13),
       running: container.State.Running }));
   assertRuntime(manifest, containers, null, true, expectedRoles);
-  return { containers, ports: portsForPlan(compose) };
+  return { containers, ports: portsForPlan(compose.services) };
 }
 function request(name, value) {
   const file = `${stage}/${name}.json`;
