@@ -2,8 +2,9 @@
 // Runs the service-owned maintenance CLI under the same host lock as backend releases.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { apps, assertRuntime, imageVariables, rolesForPlan, portsForPlan, validateState } from './backend-release-state.mjs';
@@ -51,6 +52,12 @@ function privateFile(file) {
   assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600 &&
     fs.realpathSync(file) === file, 'Expected private regular file with mode 0600');
   return fs.readFileSync(file, 'utf8');
+}
+function internalInventoryFile(requestFile, revision) {
+  const file = `${path.dirname(requestFile)}/maintenance-inventory-${randomUUID()}.json`;
+  fs.writeFileSync(file, `${JSON.stringify({ schemaVersion: 1, action: 'inventory',
+    expectedRevision: revision })}\n`, { mode: 0o600, flag: 'wx' });
+  return file;
 }
 function workerEnvironment() {
   let values;
@@ -140,6 +147,17 @@ if (mode === '--policy-self-test') {
     expectedArtifactSha256: 'b'.repeat(64), expectedStateRevision: 0,
     confirmation: 'RESTORE crm-sales' }).action, 'restore');
   assert.throws(() => request({ schemaVersion: 1, action: 'inventory', expectedRevision: revision, target: 'crm-sales' }));
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'maintenance-inventory-'));
+  try {
+    const requestFile = path.join(directory, 'inventory.json');
+    const original = `${JSON.stringify({ schemaVersion: 1, action: 'inventory', expectedRevision: revision })}\n`;
+    fs.writeFileSync(requestFile, original, { mode: 0o600, flag: 'wx' });
+    const nestedFile = internalInventoryFile(requestFile, revision);
+    assert.notEqual(nestedFile, requestFile);
+    assert.equal(fs.readFileSync(nestedFile, 'utf8'), original);
+    fs.rmSync(nestedFile);
+    assert.equal(fs.readFileSync(requestFile, 'utf8'), original);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
   console.log('Database maintenance release request policy fixtures verified');
   process.exit(0);
 }
@@ -192,12 +210,12 @@ adminUrl.password = postgres.POSTGRES_PASSWORD;
 durableLedger(image);
 prepareOperationsOwnership(image, requestFile, '/request.json');
 const current = runtime(state.manifest);
-const inventoryFile = `${path.dirname(requestFile)}/inventory.json`;
-fs.writeFileSync(inventoryFile, `${JSON.stringify({ schemaVersion: 1, action: 'inventory',
-  expectedRevision: input.expectedRevision })}\n`, { mode: 0o600, flag: 'wx' });
-prepareOperationsOwnership(image, inventoryFile, '/inventory.json');
+const inventoryFile = internalInventoryFile(requestFile, input.expectedRevision);
 let inventory;
-try { inventory = maintenance(image, inventoryFile, input.expectedRevision, adminUrl.toString()); }
+try {
+  prepareOperationsOwnership(image, inventoryFile, '/inventory.json');
+  inventory = maintenance(image, inventoryFile, input.expectedRevision, adminUrl.toString());
+}
 finally { fs.rmSync(inventoryFile, { force: true }); }
 assert(inventory.schemaVersion === 1 && inventory.revision === input.expectedRevision &&
   Array.isArray(inventory.targets) && inventory.targets.length === 12, 'Maintenance inventory differs');
