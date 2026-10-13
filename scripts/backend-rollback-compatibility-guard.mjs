@@ -43,6 +43,7 @@ const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-stora
 const messengerEntry = messengerInventory.owners['crm-access'];
 const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
 const telegramEntry = telegramInventory.owners['crm-access'];
+const reliabilityInventory = JSON.parse(fs.readFileSync(new URL('./crm-reliability-reviewed-inventory.json', import.meta.url)));
 const collaborationInventory = JSON.parse(fs.readFileSync(new URL('./workspace-collaboration-reviewed-inventory.json', import.meta.url)));
 const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
 const mailMigration = '20260928000000_corporate_mail';
@@ -86,6 +87,7 @@ function closureImageReviewed(service, sha, execute = run) {
   if (service === 'crm-sales') accepted.push(salesReminderFkInventory);
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
+  if (reliabilityInventory.owners[service]) accepted.push(reliabilityInventory.owners[service]);
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -117,6 +119,13 @@ function assertTelegramBusinessCapability({ recorded, valid, completed, capable 
   assert(valid, 'Persisted Telegram Business migration differs from its reviewed checksum');
   assert(!recorded || (completed && capable),
     'Candidate Access image cannot preserve the Telegram Business schema capability');
+}
+function assertReliabilityCapability(service, { recorded, valid, completed, capable }) {
+  assert([recorded, valid, completed, capable].every(value => typeof value === 'boolean'),
+    'Invalid CRM reliability capability state');
+  assert(valid, `Persisted ${service} reliability migration differs from its reviewed checksum`);
+  assert(!recorded || (completed && capable),
+    `Candidate ${service} image cannot preserve permanent CRM reliability capability`);
 }
 function commerceBusinessDataQuery() {
   return `SELECT json_build_object('businessWrites', ${commerceBusinessDataTables
@@ -271,7 +280,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   const previous = mailInventory.previousMailCustomers;
   const previousNotifications = mailInventory.previousNotificationsCustomers;
   const previousWorkspace = mailInventory.previousWorkspaceCustomers;
-  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace, importInventory.owners['crm-customers'], collaborationInventory.owners['crm-customers']];
+  const reviewedPairs = [customers, legacy, previous, previousNotifications, previousWorkspace, importInventory.owners['crm-customers'], collaborationInventory.owners['crm-customers'], reliabilityInventory.owners['crm-customers']];
   const reviewCustomers = (pair, crossAcl = false) => {
     let calls = 0;
     const result = closureImageReviewed('crm-customers', 'b'.repeat(40), (_label, executable, args) => {
@@ -340,7 +349,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewSales(salesReminderFkInventory, { changedAcl: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { extraMigration: true }), false);
   const accessPairs = [closureInventory.owners['crm-access'], uxInventory.owners['crm-access'],
-    collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry, telegramEntry];
+    collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry, telegramEntry,
+    reliabilityInventory.owners['crm-access']];
   const reviewAccess = (pair, { badChecksum = false, badAcl = false } = {}) => {
     let calls = 0;
     const result = closureImageReviewed('crm-access', 'c'.repeat(40), (_label, executable, args) => {
@@ -360,6 +370,10 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewAccess(messengerEntry, { badChecksum: true }), false);
   assert.equal(reviewAccess(messengerEntry, { badAcl: true }), false);
   assert.equal(reviewAccess(telegramEntry), true, 'Access image with reviewed Telegram Business migration and ACL is accepted');
+  assert.equal(reviewAccess(reliabilityInventory.owners['crm-access']), true);
+  assert.equal(reviewCustomers(reliabilityInventory.owners['crm-customers']), true);
+  assertReliabilityCapability('crm-access', { recorded: true, valid: true, completed: true, capable: true });
+  assert.throws(() => assertReliabilityCapability('crm-access', { recorded: true, valid: true, completed: true, capable: false }), /cannot preserve/);
   assertTelegramBusinessCapability({ recorded: false, valid: true, completed: false, capable: false });
   assertTelegramBusinessCapability({ recorded: true, valid: true, completed: true, capable: true });
   assert.throws(() => assertTelegramBusinessCapability({ recorded: true, valid: true, completed: true, capable: false }),
@@ -492,6 +506,23 @@ const telegramState = inspectDatabase(messengerIdentity, `SELECT json_build_obje
     AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
 assertTelegramBusinessCapability({ recorded: telegramState.recorded, valid: telegramState.valid,
   completed: telegramState.completed, capable: telegramCapable });
+for (const [service, entry] of Object.entries(reliabilityInventory.owners)) {
+  const schema = service.replace('-', '_');
+  const identity = service === 'crm-access' ? messengerIdentity : readDatabaseUrl(
+    `/opt/aerocrm/env/migrations/${service}.env`, `${schema.toUpperCase()}_DATABASE_URL`, {
+      database: `aerocrm_${schema}`, role: `aerocrm_${schema}_migration`, schema
+    });
+  const capable = imageCapabilities(candidateImage(service), [entry.migration], {
+    [entry.migration]: entry.migrations[entry.migration]
+  })[0];
+  const state = inspectDatabase(identity, `SELECT json_build_object(
+    'recorded', EXISTS(SELECT 1 FROM ${schema}._prisma_migrations WHERE migration_name='${entry.migration}'),
+    'valid', NOT EXISTS(SELECT 1 FROM ${schema}._prisma_migrations WHERE migration_name='${entry.migration}'
+      AND (checksum<>'${entry.migrations[entry.migration]}' OR rolled_back_at IS NOT NULL)),
+    'completed', (SELECT count(*)=1 FROM ${schema}._prisma_migrations WHERE migration_name='${entry.migration}'
+      AND checksum='${entry.migrations[entry.migration]}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
+  assertReliabilityCapability(service, { ...state, capable });
+}
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&

@@ -379,10 +379,12 @@ Build/sign with `../aeroCRM_monorepo/aeroCRM_android/scripts/build-release.mjs`.
 `scripts/publish-android-apk.mjs` verifies its certificate, publishes only the versioned
 APK object to the agreed `content-files` bucket, verifies anonymous download bytes, and
 updates the landing release metadata with `https://aerocrm.space/downloads/aeroCRM.apk`.
-It reads the explicit deployment-only `ANDROID_APK_S3_ENDPOINT`, `REGION`, `BUCKET`,
-`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, and `FORCE_PATH_STYLE` fields from the private
-parent `.env`. Avatar runtime credentials are independently restricted to
-`content-files/identity/avatars/*` and are never used by this publisher. The existing
+It requires a mode-0600 canonical JSON bundle at the private parent
+`.private/android/apk-s3-publisher.json`, with `ENDPOINT`, `REGION`, `BUCKET`,
+`FORCE_PATH_STYLE`, `ACCESS_KEY_ID`, and `SECRET_ACCESS_KEY` fields. Use the same
+reviewed scoped bundle as the GitHub S3 capability probe; legacy credentials in
+the parent `.env` are not a fallback. Avatar runtime credentials are independently
+restricted to `content-files/identity/avatars/*` and are never used by this publisher. The existing
 public versioned APK is the reviewed exception; runtime Mail, Support, Identity and
 Messenger objects in the Standard PRIVATE `content-files` bucket stay private.
 The Cold PRIVATE `backup-services` bucket stores only `database-backups/`.
@@ -399,6 +401,27 @@ applied hashes in its root-owned state. After deployment, verify GET bytes and S
 HEAD, a small Range request, POST 405, query 400, and no redirect or `Set-Cookie` through
 the same-origin route. A published S3 version cannot be replaced with
 different bytes. Signing keys and their encrypted backup stay outside Git and S3.
+
+## Reliability and retention release
+
+`aeroCRM_monorepo/.github/workflows/crm-reliability-release.yml` runs the exact
+production CI SHA in two serialized full-backend phases. `prepare` applies the
+reviewed CRM Access and Customers migrations and narrow routine grants while Mail
+rotation and Access retention remain disabled. `activate` uses the same image SHA
+to select independent new AES/HMAC active keys and enable bounded retention.
+Each phase checks its approved before/after aggregate env hashes and private
+canonical bundle SHA-256. The migration env hash is SHA-256 of sorted `sha256sum`
+lines for `./crm-access.env` and `./crm-customers.env`. The compatibility guard
+rejects older images after either migration is recorded; recovery is forward-only.
+
+The phase bundles contain only `operations-worker.env` Backup key fields, five
+Mail keyring/activation fields for the three Customers roles, and the Access
+retention flag for API and Telegram worker. Legacy Mail key/id values are kept
+byte-for-byte; existing read keys cannot be removed. The S3 preflight verifies
+Backup multipart/list/retention rights and APK publish/read/public ACL rights,
+plus negative cross-prefix probes. Its APK bundle hash is a separate release
+input, and the resulting synthetic public probe object is removed by an
+administrator after recording the key.
 
 ## Planner and single-session release
 

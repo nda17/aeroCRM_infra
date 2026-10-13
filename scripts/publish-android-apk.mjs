@@ -5,7 +5,6 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { parseEnv } from 'node:util';
 import { execFileSync } from 'node:child_process';
 
 if (process.argv.includes('--help')) {
@@ -29,10 +28,21 @@ const fingerprint = /Signer #1 certificate SHA-256 digest: ([a-f0-9]+)/i.exec(ve
 assert(manifest.fingerprints.some(item => item.value.replaceAll(':', '') === fingerprint), 'Signing certificate mismatch');
 const require = createRequire(path.join(root, 'aeroCRM_monorepo/aeroCRM_services/apps/identity/package.json'));
 const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const env = parseEnv(fs.readFileSync(path.join(root, '.env'), 'utf8'));
+const bundleFile = path.join(root, '.private/android/apk-s3-publisher.json');
+const bundleStat = fs.lstatSync(bundleFile);
+assert(bundleStat.isFile() && !bundleStat.isSymbolicLink() && (bundleStat.mode & 0o777) === 0o600 &&
+  (!process.getuid || bundleStat.uid === process.getuid()),
+  'A private scoped APK publisher bundle is required');
+const bundleBytes = fs.readFileSync(bundleFile);
+const env = JSON.parse(bundleBytes.toString('utf8'));
+const bundleFields = ['ENDPOINT', 'REGION', 'BUCKET', 'FORCE_PATH_STYLE', 'ACCESS_KEY_ID', 'SECRET_ACCESS_KEY'];
+assert(JSON.stringify(Object.keys(env)) === JSON.stringify(bundleFields) &&
+  bundleFields.every(name => typeof env[name] === 'string' && env[name] && !/[\r\n\0']/.test(env[name])) &&
+  bundleBytes.equals(Buffer.from(JSON.stringify(env) + '\n')) &&
+  ['true', 'false'].includes(env.FORCE_PATH_STYLE), 'APK publisher bundle shape differs');
 const input = name => {
-  const value = env[`ANDROID_APK_S3_${name}`];
-  assert(value, `Missing ANDROID_APK_S3_${name}`);
+  const value = env[name];
+  assert(value, `Missing APK publisher field: ${name}`);
   return value;
 };
 const Bucket = input('BUCKET');

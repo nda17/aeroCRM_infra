@@ -14,6 +14,7 @@ import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { storageCopyOriginInfra, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
   validateCommittedStorageRecovery } from './backend-storage-prisma-recovery.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
+import { stageReliabilityEnvironment, validateReliabilityBundle } from './backend-reliability-env.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
 import { stageTelegramBusinessEnvironment } from './backend-telegram-business-env.mjs';
 import { stageRuntimeStorageEnvironment, validateRuntimeStorageBundle, privateBytes, storageOwners, storageReferenceHash, validateFrozenAvatarReferences, privateStorageUser } from './backend-runtime-storage-env.mjs';
@@ -35,19 +36,22 @@ args.shift();
 const [role, sha, expectedEnvHash, billing = 'false', billingHash = '', custom = 'false', customHash = '',
   commerce = 'false', commerceHash = '', intake = 'false', intakeHash = '', closureMigration = 'false',
   closureHash = '', aclRepair = 'false', aclHash = '', mail = 'false', mailHash = '',
-  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = '', meeting3 = 'false', meeting3Hash = '', telegram = 'false', telegramHash = '', reminderFk = 'false', reminderFkHash = ''] = args;
+  fileImports = 'false', fileImportsHash = '', planner = 'false', plannerHash = '', ux = 'false', uxHash = '', collaboration = 'false', collaborationHash = '', meeting3 = 'false', meeting3Hash = '', telegram = 'false', telegramHash = '', reminderFk = 'false', reminderFkHash = '', reliability = 'false', reliabilityHash = ''] = args;
 assert.equal(role, 'backend'); assert(/^[a-f0-9]{40}$/.test(sha));
 assert(/^[a-f0-9]{64}$/.test(expectedEnvHash));
 assert(/^[a-f0-9]{40}$/.test(process.env.INFRA_SHA ?? ''));
 assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
-assert(args.length >= 3 && args.length <= 31, 'Invalid backend release argument count');
+assert(args.length >= 3 && args.length <= 33, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
-  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash], [meeting3, meeting3Hash], [telegram, telegramHash], [reminderFk, reminderFkHash]];
+  [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash], [meeting3, meeting3Hash], [telegram, telegramHash], [reminderFk, reminderFkHash], [reliability, reliabilityHash]];
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
 }
 assert.equal(billing, custom, 'Billing and custom-role hooks must be paired');
+if (reliability === 'true') assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports,
+  planner, ux, collaboration, meeting3, telegram, reminderFk].every(value => value === 'false'),
+  'Reliability migration must be the only reviewed migration hook');
 if (meeting3 === 'true') assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration].every(value => value === 'false'), 'Meeting 3 cannot combine migration hooks');
 if (telegram === 'true') assert([billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3].every(value => value === 'false'), 'Telegram Business cannot combine migration hooks');
 if (planner === 'true')
@@ -77,7 +81,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk, reliability];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -120,12 +124,28 @@ const storageMarker = `${releases}/runtime-storage-forward.json`;
 const storageRecoveryFile = `${releases}/runtime-storage-prisma-recovery.json`;
 const storageBundleFile = `${stagedRoot}/runtime-storage-env.json`;
 const storageManifestFile = `${stagedRoot}/storage-manifest.json`;
-const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true' || telegramEnvInstall === 'true' || storageInstall;
+const reliabilityEnvInstall = process.env.CRM_RELIABILITY_ENV_INSTALL ?? 'false';
+const reliabilityPhase = process.env.CRM_RELIABILITY_PHASE ?? '';
+const reliabilityBeforeHash = process.env.CRM_RELIABILITY_ENV_BEFORE_HASH ?? '';
+const reliabilityBundleHash = process.env.CRM_RELIABILITY_ENV_BUNDLE_HASH ?? '';
+assert(['true', 'false'].includes(reliabilityEnvInstall), 'Invalid reliability env installation flag');
+assert(reliabilityEnvInstall === 'true' ? ['prepare', 'activate'].includes(reliabilityPhase) &&
+  [reliabilityBeforeHash, reliabilityBundleHash].every(value => /^[a-f0-9]{64}$/.test(value)) :
+  !reliabilityPhase && !reliabilityBeforeHash && !reliabilityBundleHash, 'Invalid reliability env contract');
+assert(reliability !== 'true' || (reliabilityEnvInstall === 'true' && reliabilityPhase === 'prepare'),
+  'Reliability schema migration requires the prepare env stage');
+assert(reliabilityPhase !== 'activate' || reliability === 'false', 'Activation cannot re-run reliability migration');
+assert(reliabilityEnvInstall !== 'true' || (mailEnvInstall === 'false' && chatEnvInstall === 'false' &&
+  telegramEnvInstall === 'false' && !storageInstall &&
+  flags.every(value => value === 'false' || value === reliability) && uniformManifest(manifest)),
+  'Reliability env requires an isolated full backend manifest');
+const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true' || telegramEnvInstall === 'true' ||
+  storageInstall || reliabilityEnvInstall === 'true';
 if (reminderFk === 'true')
   assert(flags.filter(value => value === 'true').length === 1 && !envInstall,
     'CRM Sales reminder FK migration must be an isolated full-manifest release');
-const envBeforeHash = storageInstall ? storageBeforeHash : chatEnvInstall === 'true' ? chatEnvBeforeHash :
-  telegramEnvInstall === 'true' ? telegramEnvBeforeHash : mailEnvBeforeHash;
+const envBeforeHash = reliabilityEnvInstall === 'true' ? reliabilityBeforeHash : storageInstall ? storageBeforeHash :
+  chatEnvInstall === 'true' ? chatEnvBeforeHash : telegramEnvInstall === 'true' ? telegramEnvBeforeHash : mailEnvBeforeHash;
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
 fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
@@ -572,7 +592,8 @@ function runMigrations() {
     ['crm-ux-unification-migration.mjs', ux, uxHash],
     ['workspace-collaboration-migration.mjs', collaboration, collaborationHash], ['meeting3-migration.mjs', meeting3, meeting3Hash],
     ['telegram-business-migration.mjs', telegram, telegramHash],
-    ['crm-sales-reminder-fk-migration.mjs', reminderFk, reminderFkHash]];
+    ['crm-sales-reminder-fk-migration.mjs', reminderFk, reminderFkHash],
+    ['crm-reliability-migration.mjs', reliability, reliabilityHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
@@ -641,7 +662,13 @@ if (envInstall) {
   assert.equal(sourceState.envHash, envBeforeHash, 'Reviewed Customers before env hash mismatch');
   const candidate = `${stagedRoot}/private-env-candidate-${randomUUID()}`;
   try {
-    if (storageInstall) stageRuntimeStorageEnvironment({ bundleFile: storageBundleFile, bundleHash: storageBundleHash,
+    if (reliabilityEnvInstall === 'true') {
+      const bundleFile = `${stagedRoot}/crm-reliability-env.json`;
+      assert.equal(validateReliabilityBundle(privateBytes(bundleFile), reliabilityBundleHash).phase, reliabilityPhase,
+        'Reliability bundle phase mismatch');
+      stageReliabilityEnvironment({ bundleFile, bundleHash: reliabilityBundleHash,
+        sourceDirectory: `${configDirectory(sourceState)}/env/backend`, candidateDirectory: candidate });
+    } else if (storageInstall) stageRuntimeStorageEnvironment({ bundleFile: storageBundleFile, bundleHash: storageBundleHash,
       sourceDirectory: `${configDirectory(sourceState)}/env/backend`, candidateDirectory: candidate });
     else if (chatEnvInstall === 'true') stageChatEnvironment({ bundleFile: `${stagedRoot}/crm-access-chat-env.json`,
       bundleHash: chatEnvBundleHash, sourceDirectory: `${configDirectory(sourceState)}/env/backend`,
@@ -750,7 +777,7 @@ const outcome = runReleaseTransaction({
   isCommitted: () => fs.existsSync(stateFile) &&
     stateKey(validateState(JSON.parse(fs.readFileSync(stateFile, 'utf8')))) === stateKey(target),
   validatePrevious: () => verifyRuntime(previous),
-  forwardOnly: () => storageInstall,
+  forwardOnly: () => storageInstall || reliabilityEnvInstall === 'true',
   rollback: () => {
     inspectImages(previous.manifest); compatibility(previous);
     applyConfiguration(previous);

@@ -1,0 +1,38 @@
+[
+  {
+    "name": "aerocrm-backup-only",
+    "bucket": "backup-services",
+    "prefix": "database-backups/",
+    "policy": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"],
+          "Resource": "arn:aws:s3:::backup-services/database-backups/*"
+        },
+        {
+          "Effect": "Allow",
+          "Action": ["s3:ListBucket"],
+          "Resource": "arn:aws:s3:::backup-services",
+          "Condition": { "StringLike": { "s3:prefix": "database-backups/*" } }
+        }
+      ]
+    }
+  },
+  {
+    "name": "aerocrm-apk-publisher",
+    "bucket": "content-files",
+    "prefix": "aerocrm/android/",
+    "policy": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": ["s3:GetObject", "s3:PutObject", "s3:PutObjectAcl"],
+          "Resource": "arn:aws:s3:::content-files/aerocrm/android/*"
+        }
+      ]
+    }
+  }
+]
