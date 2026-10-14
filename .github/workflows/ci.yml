@@ -28,6 +28,7 @@ jobs:
           node --check scripts/backend-image-cleanup.mjs
           node --check scripts/crm-file-imports-migration.mjs
           node --check scripts/crm-sales-reminder-fk-migration.mjs
+          node --check scripts/crm-sales-stage-next-action-migration.mjs
           node --check scripts/database-maintenance-release.mjs
           node --check scripts/database-maintenance-rehearsal.mjs
           node --check scripts/crm-ux-unification-migration.mjs
@@ -56,6 +57,7 @@ jobs:
           node scripts/workspace-closure-enable.mjs --policy-self-test
           node scripts/crm-file-imports-migration.mjs --policy-self-test
           node scripts/crm-sales-reminder-fk-migration.mjs --policy-self-test
+          node scripts/crm-sales-stage-next-action-migration.mjs --policy-self-test
           node scripts/database-maintenance-release.mjs --policy-self-test
           node scripts/database-maintenance-rehearsal.mjs --policy-self-test
           node scripts/crm-ux-unification-migration.mjs --policy-self-test

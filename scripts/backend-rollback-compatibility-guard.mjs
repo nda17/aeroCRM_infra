@@ -39,6 +39,12 @@ const salesReminderFkInventory = {
 };
 assert.equal(meeting3Inventory.owners['crm-sales'].aclSha256, salesReminderFkInventory.aclSha256,
   'Reviewed CRM Sales reminder FK ACL differs from the prior schema');
+const salesStageNextActionMigration = '20261014010000_stage_next_action_templates';
+const salesStageNextActionInventory = {
+  migrations: { ...salesReminderFkInventory.migrations,
+    [salesStageNextActionMigration]: '4b46859b917757ddbfb4e14cfe17cbbfbf8a5e11a8dc5de083c743a7d02a138b' },
+  aclSha256: salesReminderFkInventory.aclSha256
+};
 const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
 const messengerEntry = messengerInventory.owners['crm-access'];
 const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
@@ -84,7 +90,7 @@ function closureImageReviewed(service, sha, execute = run) {
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
-  if (service === 'crm-sales') accepted.push(salesReminderFkInventory);
+  if (service === 'crm-sales') accepted.push(salesReminderFkInventory, salesStageNextActionInventory);
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
   if (reliabilityInventory.owners[service]) accepted.push(reliabilityInventory.owners[service]);
@@ -319,9 +325,18 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     'CRM Sales reminder FK guard and hook migration inventories differ');
   assert.equal(salesHook.match(/const aclSha256 = '([a-f0-9]{64})';/)?.[1],
     salesReminderFkInventory.aclSha256, 'CRM Sales reminder FK guard and hook ACL hashes differ');
+  const stageHook = fs.readFileSync(new URL('./crm-sales-stage-next-action-migration.mjs', import.meta.url), 'utf8');
+  const declaredStageMigrations = stageHook.match(/const migrations = \[([\s\S]*?)\n\];/)?.[1];
+  assert(declaredStageMigrations, 'CRM Sales stage next-action hook inventory missing');
+  const stageHookMigrations = Object.fromEntries([...declaredStageMigrations.matchAll(/\['([^']+)', '([a-f0-9]{64})'\]/g)]
+    .map(([, name, checksum]) => [name, checksum]));
+  assert.deepEqual(stageHookMigrations, salesStageNextActionInventory.migrations,
+    'CRM Sales stage next-action guard and hook migration inventories differ');
+  assert.equal(stageHook.match(/const aclSha256 = '([a-f0-9]{64})';/)?.[1],
+    salesStageNextActionInventory.aclSha256, 'CRM Sales stage next-action guard and hook ACL hashes differ');
   const salesPairs = [closureInventory.owners['crm-sales'], importInventory.owners['crm-sales'],
     plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales'],
-    meeting3Inventory.owners['crm-sales'], salesReminderFkInventory];
+    meeting3Inventory.owners['crm-sales'], salesReminderFkInventory, salesStageNextActionInventory];
   const reviewSales = (pair, { changedMigration = false, missingMigration = false,
     changedAcl = false, extraMigration = false } = {}) => {
     let calls = 0;
@@ -332,6 +347,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
       const script = args.at(-1);
       assert(script.includes(salesReminderFkMigration));
       assert(script.includes(salesReminderFkInventory.migrations[salesReminderFkMigration]));
+      assert(script.includes(salesStageNextActionMigration));
+      assert(script.includes(salesStageNextActionInventory.migrations[salesStageNextActionMigration]));
       return JSON.stringify({ migrations: !changedMigration && !missingMigration, inventoryIndex: extraMigration
         ? salesPairs.length : salesPairs.indexOf(pair),
       aclSha: changedAcl ? '0'.repeat(64) : pair.aclSha256 });
@@ -340,14 +357,21 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     return result;
   };
   assert.equal(Object.keys(salesReminderFkInventory.migrations).length, 8);
+  assert.equal(Object.keys(salesStageNextActionInventory.migrations).length, 9);
   assert.equal(reviewSales(meeting3Inventory.owners['crm-sales']), true,
     'The reviewed seven-migration Sales image remains available for rollback');
   assert.equal(reviewSales(salesReminderFkInventory), true,
     'The reviewed eight-migration Sales image supports the additive FK');
+  assert.equal(reviewSales(salesStageNextActionInventory), true,
+    'The reviewed nine-migration Sales image supports stage next-action templates');
   assert.equal(reviewSales(salesReminderFkInventory, { changedMigration: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { missingMigration: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { changedAcl: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { extraMigration: true }), false);
+  assert.equal(reviewSales(salesStageNextActionInventory, { changedMigration: true }), false);
+  assert.equal(reviewSales(salesStageNextActionInventory, { missingMigration: true }), false);
+  assert.equal(reviewSales(salesStageNextActionInventory, { changedAcl: true }), false);
+  assert.equal(reviewSales(salesStageNextActionInventory, { extraMigration: true }), false);
   const accessPairs = [closureInventory.owners['crm-access'], uxInventory.owners['crm-access'],
     collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry, telegramEntry,
     reliabilityInventory.owners['crm-access']];

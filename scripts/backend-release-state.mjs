@@ -45,6 +45,15 @@ function keys(object, expected) {
   assert(object && typeof object === 'object' && !Array.isArray(object), 'Object required');
   assert.deepEqual(Object.keys(object).sort(), [...expected].sort(), 'Unexpected release contract fields');
 }
+export function nonReliabilityHooksDisabled(flags) {
+  const otherHooks = ['billing', 'custom', 'commerce', 'intake', 'closureMigration',
+    'aclRepair', 'mail', 'fileImports', 'planner', 'ux', 'collaboration', 'meeting3',
+    'telegram', 'reminderFk', 'stageNextAction'];
+  keys(flags, [...otherHooks, 'reliability']);
+  assert(Object.values(flags).every(value => value === 'true' || value === 'false'),
+    'Invalid migration flag');
+  return otherHooks.every(name => flags[name] === 'false');
+}
 export function validateManifest(manifest) {
   keys(manifest, ['schemaVersion', 'releaseSha', 'ciRunId', 'services']);
   assert.equal(manifest.schemaVersion, 1); assert(matches(sha, manifest.releaseSha));

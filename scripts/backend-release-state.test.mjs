@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, validatePending,
   compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig,
   reviewedStoragePendingAmendment, reviewedReliabilityPendingAmendment,
-  reviewedReliabilityPostDdlAmendment }
+  reviewedReliabilityPostDdlAmendment, nonReliabilityHooksDisabled }
   from './backend-release-state.mjs';
 import { auditedMessengerAttempt, isAuditedMessengerAttempt, auditedMessengerAttemptSql,
   validateCommittedStorageRecovery, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
@@ -12,6 +12,29 @@ import { auditedMessengerAttempt, isAuditedMessengerAttempt, auditedMessengerAtt
 
 const sha = char => char.repeat(40);
 const hash = char => char.repeat(64);
+const reliabilityHookFlags = Object.fromEntries([
+  'billing', 'custom', 'commerce', 'intake', 'closureMigration', 'aclRepair', 'mail',
+  'fileImports', 'planner', 'ux', 'collaboration', 'meeting3', 'telegram',
+  'reminderFk', 'stageNextAction', 'reliability'
+].map(name => [name, 'false']));
+
+test('reliability recovery guard permits only reliability migration and rejects every other hook', () => {
+  for (const reliability of ['false', 'true']) {
+    assert.equal(nonReliabilityHooksDisabled({ ...reliabilityHookFlags, reliability }), true);
+  }
+  for (const hook of Object.keys(reliabilityHookFlags).filter(name => name !== 'reliability')) {
+    assert.equal(nonReliabilityHooksDisabled({ ...reliabilityHookFlags, [hook]: 'true' }), false, hook);
+  }
+  assert.throws(() => nonReliabilityHooksDisabled({
+    ...reliabilityHookFlags,
+    unreviewedHook: 'false'
+  }), /Unexpected release contract fields/);
+  assert.throws(() => nonReliabilityHooksDisabled({
+    ...reliabilityHookFlags,
+    stageNextAction: true
+  }), /Invalid migration flag/);
+});
+
 function manifest({ release = sha('a'), run = '101', perApp = {} } = {}) {
   return {
     schemaVersion: 1,
@@ -253,6 +276,8 @@ test('reviewed reliability recovery rejects journal, migration, environment, man
     args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '303' }) }; },
     args => { args.target = { ...args.target, composeHash: hash('8') }; },
     args => { args.reliabilityPhase = 'activate'; },
+    args => { args.reliabilityMigration = false; },
+    args => { args.otherHooksDisabled = false; },
     args => { args.runtimeVerified = false; },
     args => { args.readinessVerified = false; },
   ];
@@ -280,6 +305,8 @@ test('reviewed post-DDL recovery rejects broken parent chain, incomplete DDL pro
     args => { args.liveEnvHash = hash('8'); },
     args => { args.liveComposeHash = hash('8'); },
     args => { args.reliabilityPhase = 'activate'; },
+    args => { args.reliabilityMigration = false; },
+    args => { args.otherHooksDisabled = false; },
     args => { args.runtimeVerified = false; },
     args => { args.readinessVerified = false; },
     args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '303' }) }; },

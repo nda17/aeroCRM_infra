@@ -305,6 +305,22 @@ The verified S3 backups remain recovery evidence, but automatic S3 restore is st
 disabled and requires the separate PostgreSQL 18 restore admission work described
 in the project backlog.
 
+The stage next-action templates release uses the separate
+`crm_sales_stage_next_action_migration=true` hook with the SHA-256 of the same private
+`migrations/crm-sales.env` as `crm_sales_stage_next_action_migration_env_hash`. Its
+reviewed image must contain exactly nine CRM Sales migrations and the existing ACL
+manifest. The hook accepts the completed eight-migration baseline or an already
+completed ninth migration, verifies the nullable columns, exact CHECK definition,
+existing workspace closure triggers and function bodies, and runtime/backup grants
+before and after Prisma deploy, then permits the backend image switch. The same
+script supports read-only preflight on the release host with
+`node scripts/crm-sales-stage-next-action-migration.mjs --inspect-read-only <crm-sales.env SHA-256>`;
+it verifies migration history, schema, closure guards and grants without deploying.
+Keep this release isolated and use a full exact-SHA backend manifest. Check backend
+readiness and both existing and
+new read contracts before dispatching the frontend release separately. The additive
+columns remain in place during a guarded rollback to an older reviewed Sales image.
+
 ## CRM Intake notification UUID default migration
 
 The first compatible backend release uses `crm_intake_notifications_migration=true`
