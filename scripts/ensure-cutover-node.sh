@@ -15,6 +15,7 @@ case "${1:-}" in
   --crm-sales-commerce) checked_scripts=(crm-sales-commerce-migration.mjs) ;;
   --crm-sales-reminder-fk) checked_scripts=(crm-sales-reminder-fk-migration.mjs) ;;
   --crm-sales-stage-next-action) checked_scripts=(crm-sales-stage-next-action-migration.mjs) ;;
+  --crm-sales-stage-duration) checked_scripts=(crm-sales-stage-duration-migration.mjs) ;;
   --database-maintenance) checked_scripts=(database-maintenance-release.mjs backend-release-state.mjs) ;;
   --database-maintenance-rehearsal) checked_scripts=(database-maintenance-rehearsal.mjs database-maintenance-release.mjs backend-release-state.mjs) ;;
   --crm-corporate-mail) checked_scripts=(crm-corporate-mail-migration.mjs) ;;

@@ -65,7 +65,9 @@ crm_reliability_migration=${32:-false}
 crm_reliability_migration_env_hash=${33:-}
 crm_sales_stage_next_action_migration=${34:-false}
 crm_sales_stage_next_action_migration_env_hash=${35:-}
-[[ $# -le 35 ]] || exit 64
+crm_sales_stage_duration_migration=${36:-false}
+crm_sales_stage_duration_migration_env_hash=${37:-}
+[[ $# -le 37 ]] || exit 64
 [[ "$role" == frontend || "$role" == backend ]] || exit 64
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
 [[ "$expected_env_hash" =~ ^[a-f0-9]{64}$ ]] || exit 64
@@ -75,6 +77,7 @@ crm_sales_stage_next_action_migration_env_hash=${35:-}
 [[ "$crm_sales_reminder_fk_migration" == true || "$crm_sales_reminder_fk_migration" == false ]] || exit 64
 [[ "$crm_reliability_migration" == true || "$crm_reliability_migration" == false ]] || exit 64
 [[ "$crm_sales_stage_next_action_migration" == true || "$crm_sales_stage_next_action_migration" == false ]] || exit 64
+[[ "$crm_sales_stage_duration_migration" == true || "$crm_sales_stage_duration_migration" == false ]] || exit 64
 [[ "$crm_intake_notifications_migration" == true || "$crm_intake_notifications_migration" == false ]] || exit 64
 [[ "$workspace_closure_migration" == true || "$workspace_closure_migration" == false ]] || exit 64
 [[ "$workspace_closure_identity_acl_repair" == true || "$workspace_closure_identity_acl_repair" == false ]] || exit 64
@@ -212,10 +215,25 @@ if [[ "$crm_sales_stage_next_action_migration" == true ]]; then
     "$crm_planner_customization_migration" == false && "$crm_ux_unification_migration" == false &&
     "$crm_workspace_collaboration_migration" == false && "$crm_meeting3_migration" == false &&
     "$crm_telegram_business_migration" == false && "$crm_sales_reminder_fk_migration" == false &&
-    "$crm_reliability_migration" == false && "$workspace_closure_migration" == false &&
+    "$crm_reliability_migration" == false && "$crm_sales_stage_duration_migration" == false &&
+    "$workspace_closure_migration" == false &&
     "$workspace_closure_identity_acl_repair" == false ]] || exit 64
 else
   [[ -z "$crm_sales_stage_next_action_migration_env_hash" ]] || exit 64
+fi
+if [[ "$crm_sales_stage_duration_migration" == true ]]; then
+  [[ "$role" == backend && "$crm_sales_stage_duration_migration_env_hash" =~ ^[a-f0-9]{64}$ &&
+    "$billing_capacity_migration" == false && "$crm_custom_roles_migration" == false &&
+    "$crm_sales_commerce_migration" == false && "$crm_intake_notifications_migration" == false &&
+    "$crm_corporate_mail_migration" == false && "$crm_file_imports_migration" == false &&
+    "$crm_planner_customization_migration" == false && "$crm_ux_unification_migration" == false &&
+    "$crm_workspace_collaboration_migration" == false && "$crm_meeting3_migration" == false &&
+    "$crm_telegram_business_migration" == false && "$crm_sales_reminder_fk_migration" == false &&
+    "$crm_sales_stage_next_action_migration" == false &&
+    "$crm_reliability_migration" == false && "$workspace_closure_migration" == false &&
+    "$workspace_closure_identity_acl_repair" == false ]] || exit 64
+else
+  [[ -z "$crm_sales_stage_duration_migration_env_hash" ]] || exit 64
 fi
 # The staged backend controller acquires the shared lock before any configuration mutation.
 if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
@@ -237,6 +255,10 @@ if [[ "$crm_sales_reminder_fk_migration" == true ]]; then
 fi
 if [[ "$crm_sales_stage_next_action_migration" == true ]]; then
   echo 'CRM Sales stage next-action migration requires the full canonical backend manifest controller' >&2
+  exit 1
+fi
+if [[ "$crm_sales_stage_duration_migration" == true ]]; then
+  echo 'CRM Sales stage duration migration requires the full canonical backend manifest controller' >&2
   exit 1
 fi
 if [[ "$crm_reliability_migration" == true ]]; then

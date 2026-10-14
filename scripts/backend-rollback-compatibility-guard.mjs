@@ -45,6 +45,12 @@ const salesStageNextActionInventory = {
     [salesStageNextActionMigration]: '4b46859b917757ddbfb4e14cfe17cbbfbf8a5e11a8dc5de083c743a7d02a138b' },
   aclSha256: salesReminderFkInventory.aclSha256
 };
+const salesStageDurationMigration = '20261014020000_stage_duration_control';
+const salesStageDurationInventory = {
+  migrations: { ...salesStageNextActionInventory.migrations,
+    [salesStageDurationMigration]: 'ad14c772257dfd9f9100d0d76cd01664604cfcb2d3d5cb6a8249aaade192d541' },
+  aclSha256: '52472e61fd18bbc4813887979ed4c38773e27ce3992a31fc3e6db5a4adf96330'
+};
 const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
 const messengerEntry = messengerInventory.owners['crm-access'];
 const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
@@ -90,7 +96,7 @@ function closureImageReviewed(service, sha, execute = run) {
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
-  if (service === 'crm-sales') accepted.push(salesReminderFkInventory, salesStageNextActionInventory);
+  if (service === 'crm-sales') accepted.push(salesReminderFkInventory, salesStageNextActionInventory, salesStageDurationInventory);
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
   if (reliabilityInventory.owners[service]) accepted.push(reliabilityInventory.owners[service]);
@@ -111,6 +117,54 @@ function closureImageReviewed(service, sha, execute = run) {
   ]));
   const inventoryIndex = result.inventoryIndex ?? (accepted.length === 1 ? 0 : -1);
   return result.migrations === true && Number.isInteger(inventoryIndex) && result.aclSha === accepted[inventoryIndex]?.aclSha256;
+}
+function stageDurationSalesImageReviewed(sha, execute = run) {
+  const image = `aerocrm/crm-sales:${sha}`;
+  const revision = execute('CRM Sales stage duration image revision', 'docker', ['image', 'inspect',
+    '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
+  if (revision !== sha) return false;
+  const observed = JSON.parse(execute('CRM Sales stage duration inventory', 'docker', [
+    'run', '--rm', '--network', 'none', '--entrypoint', 'node', image, '-e',
+    `const fs=require('node:fs'),crypto=require('node:crypto'),root='/app/prisma';
+     const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
+     console.log(JSON.stringify({migrations:Object.fromEntries(fs.readdirSync(root+'/migrations',{withFileTypes:true})
+       .filter(entry=>entry.isDirectory()).map(entry=>[entry.name,hash(fs.readFileSync(root+'/migrations/'+entry.name+'/migration.sql'))])
+       .sort(([a],[b])=>a.localeCompare(b))),aclSha256:hash(fs.readFileSync(root+'/database-access.json'))}));`
+  ]));
+  try { assert.deepEqual(observed, salesStageDurationInventory); return true; }
+  catch { return false; }
+}
+function stageDurationAccessCapable(image, execute = run) {
+  return JSON.parse(execute('CRM Access stage duration saved-view capability', 'docker', [
+    'run', '--rm', '--network', 'none', '--entrypoint', 'node', image, '-e',
+    `let capable=false;
+     try {
+       const contract=require('/app/dist/src/saved-views/saved-views.service.js');
+       if(contract.STAGE_DURATION_SAVED_VIEWS_CAPABILITY==='stage-duration-saved-views-v1' &&
+          typeof contract.validateSavedParameters==='function') {
+         const base={search:'',pipelineId:'',status:'',withoutNextAction:false,layout:'list',sort:'created_desc'};
+         capable=[true,false].every(stageOverdue=>{
+           const parameters={...base,stageOverdue};
+           const result=contract.validateSavedParameters('DEALS',parameters,'stage-duration');
+           let legacyRejected=false;
+           try { contract.validateSavedParameters('DEALS',parameters); } catch { legacyRejected=true; }
+           return result.stageOverdue===stageOverdue && legacyRejected;
+         });
+         let invalidRejected=false;
+         try { contract.validateSavedParameters('DEALS',{...base,stageOverdue:'true'},'stage-duration'); }
+         catch { invalidRejected=true; }
+         capable=capable && invalidRejected;
+       }
+     } catch {}
+     console.log(JSON.stringify(capable));`
+  ]));
+}
+function assertStageDurationCapability({ recorded, valid, completed, salesCapable, accessCapable }) {
+  assert([recorded, valid, completed, salesCapable, accessCapable].every(value => typeof value === 'boolean'),
+    'Invalid CRM stage duration capability state');
+  assert(valid, 'Persisted CRM Sales stage duration migration differs from its reviewed checksum');
+  assert(!recorded || (completed && salesCapable && accessCapable),
+    'Candidate backend images cannot preserve stage duration schema and saved-view capability');
 }
 function assertMessengerCapability({ markerPresent, recorded, valid, completed, capable }) {
   assert([markerPresent, recorded, valid, completed, capable].every(value => typeof value === 'boolean'),
@@ -336,7 +390,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     salesStageNextActionInventory.aclSha256, 'CRM Sales stage next-action guard and hook ACL hashes differ');
   const salesPairs = [closureInventory.owners['crm-sales'], importInventory.owners['crm-sales'],
     plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales'],
-    meeting3Inventory.owners['crm-sales'], salesReminderFkInventory, salesStageNextActionInventory];
+    meeting3Inventory.owners['crm-sales'], salesReminderFkInventory, salesStageNextActionInventory,
+    salesStageDurationInventory];
   const reviewSales = (pair, { changedMigration = false, missingMigration = false,
     changedAcl = false, extraMigration = false } = {}) => {
     let calls = 0;
@@ -349,6 +404,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
       assert(script.includes(salesReminderFkInventory.migrations[salesReminderFkMigration]));
       assert(script.includes(salesStageNextActionMigration));
       assert(script.includes(salesStageNextActionInventory.migrations[salesStageNextActionMigration]));
+      assert(script.includes(salesStageDurationMigration));
+      assert(script.includes(salesStageDurationInventory.migrations[salesStageDurationMigration]));
       return JSON.stringify({ migrations: !changedMigration && !missingMigration, inventoryIndex: extraMigration
         ? salesPairs.length : salesPairs.indexOf(pair),
       aclSha: changedAcl ? '0'.repeat(64) : pair.aclSha256 });
@@ -358,12 +415,15 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   };
   assert.equal(Object.keys(salesReminderFkInventory.migrations).length, 8);
   assert.equal(Object.keys(salesStageNextActionInventory.migrations).length, 9);
+  assert.equal(Object.keys(salesStageDurationInventory.migrations).length, 10);
   assert.equal(reviewSales(meeting3Inventory.owners['crm-sales']), true,
     'The reviewed seven-migration Sales image remains available for rollback');
   assert.equal(reviewSales(salesReminderFkInventory), true,
     'The reviewed eight-migration Sales image supports the additive FK');
   assert.equal(reviewSales(salesStageNextActionInventory), true,
     'The reviewed nine-migration Sales image supports stage next-action templates');
+  assert.equal(reviewSales(salesStageDurationInventory), true,
+    'The reviewed ten-migration Sales image supports stage duration');
   assert.equal(reviewSales(salesReminderFkInventory, { changedMigration: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { missingMigration: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { changedAcl: true }), false);
@@ -372,6 +432,43 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewSales(salesStageNextActionInventory, { missingMigration: true }), false);
   assert.equal(reviewSales(salesStageNextActionInventory, { changedAcl: true }), false);
   assert.equal(reviewSales(salesStageNextActionInventory, { extraMigration: true }), false);
+  assert.equal(reviewSales(salesStageDurationInventory, { changedMigration: true }), false);
+  assert.equal(reviewSales(salesStageDurationInventory, { missingMigration: true }), false);
+  assert.equal(reviewSales(salesStageDurationInventory, { changedAcl: true }), false);
+  assert.equal(reviewSales(salesStageDurationInventory, { extraMigration: true }), false);
+  let stageCalls = 0;
+  assert.equal(stageDurationSalesImageReviewed('e'.repeat(40), (_label, executable, args) => {
+    stageCalls++;
+    assert.equal(executable, 'docker');
+    if (stageCalls === 1) return 'e'.repeat(40);
+    assert(args.includes('none'));
+    assert(args.at(-1).includes("root='/app/prisma'"));
+    return JSON.stringify(salesStageDurationInventory);
+  }), true);
+  assert.equal(stageCalls, 2);
+  assert.equal(stageDurationSalesImageReviewed('e'.repeat(40), (_label, _executable, args) =>
+    args[0] === 'image' ? 'e'.repeat(40) : JSON.stringify({ migrations: {}, aclSha256: '0'.repeat(64) })), false);
+  let accessProbe;
+  assert.equal(stageDurationAccessCapable('aerocrm/crm-access:fixture', (_label, executable, args) => {
+    accessProbe = { executable, args };
+    return 'true';
+  }), true);
+  assert.equal(accessProbe.executable, 'docker');
+  assert(accessProbe.args.includes('none'));
+  assert(accessProbe.args.at(-1).includes("validateSavedParameters('DEALS'"));
+  assert(accessProbe.args.at(-1).includes("'stage-duration'"));
+  assertStageDurationCapability({ recorded: false, valid: true, completed: false,
+    salesCapable: false, accessCapable: false });
+  assertStageDurationCapability({ recorded: true, valid: true, completed: true,
+    salesCapable: true, accessCapable: true });
+  assert.throws(() => assertStageDurationCapability({ recorded: true, valid: false, completed: false,
+    salesCapable: false, accessCapable: false }), /differs from its reviewed checksum/);
+  assert.throws(() => assertStageDurationCapability({ recorded: true, valid: true, completed: false,
+    salesCapable: true, accessCapable: true }), /cannot preserve stage duration/);
+  assert.throws(() => assertStageDurationCapability({ recorded: true, valid: true, completed: true,
+    salesCapable: false, accessCapable: true }), /cannot preserve stage duration/);
+  assert.throws(() => assertStageDurationCapability({ recorded: true, valid: true, completed: true,
+    salesCapable: true, accessCapable: false }), /cannot preserve stage duration/);
   const accessPairs = [closureInventory.owners['crm-access'], uxInventory.owners['crm-access'],
     collaborationInventory.owners['crm-access'], meeting3Inventory.owners['crm-access'], messengerEntry, telegramEntry,
     reliabilityInventory.owners['crm-access']];
@@ -547,6 +644,25 @@ for (const [service, entry] of Object.entries(reliabilityInventory.owners)) {
       AND checksum='${entry.migrations[entry.migration]}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
   assertReliabilityCapability(service, { ...state, capable });
 }
+// Duration state and opt-in saved views form a permanent cross-service capability.
+// This guard precedes the fast-success path and also checks mixed per-service manifests.
+const durationIdentity = readDatabaseUrl(crmSalesEnvFile, 'CRM_SALES_DATABASE_URL', {
+  database: 'aerocrm_crm_sales', role: 'aerocrm_crm_sales_migration', schema: 'crm_sales'
+});
+const durationState = inspectDatabase(durationIdentity, `SELECT json_build_object(
+  'recorded', EXISTS(SELECT 1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesStageDurationMigration}'),
+  'valid', NOT EXISTS(SELECT 1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesStageDurationMigration}'
+    AND (checksum<>'${salesStageDurationInventory.migrations[salesStageDurationMigration]}' OR rolled_back_at IS NOT NULL)),
+  'completed', (SELECT count(*)=1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesStageDurationMigration}'
+    AND checksum='${salesStageDurationInventory.migrations[salesStageDurationMigration]}'
+    AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
+const durationSalesCapable = stageDurationSalesImageReviewed(candidateManifest?.services['crm-sales'].sourceSha ?? candidateSha);
+const durationAccessImage = candidateImage('crm-access');
+const durationAccessRevision = run('CRM Access stage duration image revision', 'docker', ['image', 'inspect',
+  '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', durationAccessImage]);
+const durationAccessCapable = durationAccessRevision === (candidateManifest?.services['crm-access'].sourceSha ?? candidateSha) &&
+  stageDurationAccessCapable(durationAccessImage);
+assertStageDurationCapability({ ...durationState, salesCapable: durationSalesCapable, accessCapable: durationAccessCapable });
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&

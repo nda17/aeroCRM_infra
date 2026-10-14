@@ -14,7 +14,7 @@ const sha = char => char.repeat(40);
 const hash = char => char.repeat(64);
 const reliabilityHookFlags = Object.fromEntries([
   'billing', 'custom', 'commerce', 'intake', 'closureMigration', 'aclRepair', 'mail',
-  'fileImports', 'planner', 'ux', 'collaboration', 'meeting3', 'telegram',
+  'fileImports', 'planner', 'ux', 'collaboration', 'meeting3', 'telegram', 'stageDuration',
   'reminderFk', 'stageNextAction', 'reliability'
 ].map(name => [name, 'false']));
 
@@ -278,6 +278,7 @@ test('reviewed reliability recovery rejects journal, migration, environment, man
     args => { args.reliabilityPhase = 'activate'; },
     args => { args.reliabilityMigration = false; },
     args => { args.otherHooksDisabled = false; },
+    args => { args.otherHooksDisabled = nonReliabilityHooksDisabled({ ...reliabilityHookFlags, stageDuration: 'true' }); },
     args => { args.runtimeVerified = false; },
     args => { args.readinessVerified = false; },
   ];
@@ -307,6 +308,7 @@ test('reviewed post-DDL recovery rejects broken parent chain, incomplete DDL pro
     args => { args.reliabilityPhase = 'activate'; },
     args => { args.reliabilityMigration = false; },
     args => { args.otherHooksDisabled = false; },
+    args => { args.otherHooksDisabled = nonReliabilityHooksDisabled({ ...reliabilityHookFlags, stageDuration: 'true' }); },
     args => { args.runtimeVerified = false; },
     args => { args.readinessVerified = false; },
     args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '303' }) }; },
