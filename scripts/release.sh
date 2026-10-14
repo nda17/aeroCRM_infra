@@ -463,6 +463,7 @@ if [[ "$role" == frontend ]]; then
     curl --fail --silent --show-error --retry 12 --retry-delay 2 --retry-connrefused --connect-timeout 2 --max-time 5 --retry-max-time 45 "http://127.0.0.1:$port/__frontend/health" >/dev/null
   done
   sudo -n /usr/local/sbin/aerocrm-nginx-release apply "$sha"
+  sudo -n /usr/local/sbin/aerocrm-nginx-release verify "$sha"
 else
   ports=(4100 4401 4500 4600 4800 4801 4802 4803 4900 4901 4902 5000 5001 5100 5101 5102 5200 5201 5202 5300 5301 5302 5310 5311 5312 5317 5318 5320 5321 5322 5330 5331)
   for port in "${ports[@]}"; do

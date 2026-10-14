@@ -19,6 +19,9 @@ jobs:
         run: |
           bash -n scripts/release.sh
           bash -n scripts/ensure-cutover-node.sh
+          bash -n scripts/aerocrm-nginx-release.sh
+          node --check scripts/frontend-edge-recovery.mjs
+          node --test scripts/frontend-edge-recovery.test.mjs
           node --check scripts/backend-release.mjs
           node --check scripts/backend-release-state.mjs
           node --check scripts/backend-release-transaction.mjs

@@ -418,6 +418,35 @@ HEAD, a small Range request, POST 405, query 400, and no redirect or `Set-Cookie
 the same-origin route. A published S3 version cannot be replaced with
 different bytes. Signing keys and their encrypted backup stay outside Git and S3.
 
+## Frontend edge recovery
+
+The application `frontend-edge-recovery.yml` workflow restores the existing frontend
+Nginx service through reviewed CI/CD. It requires green exact-SHA application and
+infrastructure CI, the currently deployed frontend SHA, the approved frontend env
+hash, and the installed root helper hash. Recovery preserves application images,
+container identities, configuration, certificates and release markers. The helper
+starts an inactive/failed Nginx service; an active service is left running. Strict
+internal health and verified TLS/SNI checks must return the expected application
+and revision for all three frontends, followed by public HTTPS checks in CI.
+
+Bootstrap uses the existing verified SSH host keys and a temporary
+`FRONTEND_EDGE_BOOTSTRAP_PASSWORD` GitHub secret for the fixed `root` account.
+Provision it from the private administrator credential only after reviewing the
+workflow and infrastructure commit. The runner uses SSH_ASKPASS without placing
+the password in command arguments or files. It installs only the reviewed helper
+bytes through a root-owned temporary file, verifies their SHA-256, and atomically
+replaces the exact approved installed helper under the existing release lock.
+Delete the temporary repository secret after the workflow finishes, including
+failed/cancelled runs; runner temporary host-key/askpass files are always removed.
+The sudoers policy does not change. A retry accepts only the same approved helper
+bytes and repeats the live recovery proofs.
+
+Ordinary frontend releases verify loopback HTTPS before committing their marker
+and verify all public HTTPS revisions before CI reports success. Recovery does
+not remove the startup dependency on DNS resolution of the fixed APK upstream
+`s3.twcstorage.ru`; isolating that dependency and testing cold startup belongs to
+the pending DNS resilience work in the workspace backlog.
+
 ## Reliability and retention release
 
 `aeroCRM_monorepo/.github/workflows/crm-reliability-release.yml` runs the exact

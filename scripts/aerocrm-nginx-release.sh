@@ -5,8 +5,14 @@ set -euo pipefail
 # A changed frontend vhost requires a reviewed helper with its new SHA-256.
 action=${1:-}
 sha=${2:-}
-[[ $# -eq 2 && "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
-[[ "$action" == check || "$action" == apply || "$action" == rollback || "$action" == commit ]] || exit 64
+[[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
+if [[ "$action" == recover ]]; then
+  [[ $# -eq 3 && "$3" =~ ^[a-f0-9]{64}$ ]] || exit 64
+else
+  [[ $# -eq 2 ]] || exit 64
+fi
+[[ "$action" == check || "$action" == apply || "$action" == rollback || "$action" == commit ||
+  "$action" == recover || "$action" == verify ]] || exit 64
 [[ $(id -u) -eq 0 && $(cat /etc/aerocrm-host-role) == frontend ]] || exit 1
 
 vhost=/etc/nginx/sites-available/aerocrm
@@ -24,6 +30,76 @@ candidate_sha=9c150bf83575156e605798e9e805f4f80f1ca3b3314a1fa4766bdaa0970b80bb
 install -d -m 0700 "$state_dir"
 
 file_sha() { sha256sum "$1" | cut -d' ' -f1; }
+
+validate_health() {
+  python3 -c 'import json,sys
+def unique(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result: raise ValueError("Duplicate health field")
+        result[key]=value
+    return result
+value=json.load(sys.stdin,object_pairs_hook=unique)
+assert type(value) is dict and set(value)=={"status","application","revision"}
+assert value=={"status":"ok","application":sys.argv[1],"revision":sys.argv[2]}
+' "$1" "$sha"
+}
+
+verify_https() {
+  local app domain
+  while read -r app domain; do
+    curl --fail --silent --show-error --noproxy '*' --proto '=https' \
+      --resolve "$domain:443:127.0.0.1" --connect-timeout 2 --max-time 5 \
+      --retry 4 --retry-delay 1 --retry-connrefused \
+      "https://$domain/__frontend/health" | validate_health "$app" || return 1
+  done <<'TARGETS'
+landing aerocrm.space
+crm workspace.aerocrm.space
+admin-panel admin.aerocrm.space
+TARGETS
+}
+
+service_action() {
+  local mode="$1" state
+  state=$(systemctl show nginx --property=ActiveState --value) || return 1
+  case "$state" in
+    active) if [[ "$mode" != recover ]]; then systemctl reload nginx || return 1; fi ;;
+    inactive|failed) systemctl start nginx || return 1 ;;
+    *) echo 'Nginx is in an unreviewed transitional state' >&2; return 1 ;;
+  esac
+  systemctl is-active --quiet nginx
+}
+
+frontend_snapshot() {
+  local app port observed
+  while read -r app port; do
+    observed=$(docker inspect --format '{{.Id}} {{.Image}} {{.Config.Image}} {{.State.Running}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.StartedAt}} {{.RestartCount}} {{.State.OOMKilled}}' "aerocrm-frontend-$app-1") || return 1
+    read -r id image tag running revision started restarts oom <<< "$observed"
+    [[ "$id" =~ ^[a-f0-9]{64}$ && "$image" =~ ^sha256:[a-f0-9]{64}$ &&
+      "$tag" == "aerocrm/$app:$sha" && "$running" == true && "$revision" == "$sha" &&
+      "$restarts" =~ ^[0-9]+$ && "$oom" == false && -n "$started" ]] || return 1
+    printf '%s %s\n' "$app" "$observed"
+    curl --fail --silent --show-error --noproxy '*' --connect-timeout 2 --max-time 5 \
+      "http://127.0.0.1:$port/__frontend/health" | validate_health "$app" || return 1
+  done <<'TARGETS'
+landing 3100
+crm 3200
+admin-panel 3300
+TARGETS
+}
+
+frontend_env_hash() {
+  local directory=/opt/aerocrm/env/frontend
+  [[ -d "$directory" && ! -L "$directory" ]] || return 1
+  [[ $(find "$directory" -maxdepth 1 -type f -name '*.env' | wc -l) -eq 3 ]] || return 1
+  [[ -z $(find "$directory" -maxdepth 1 -name '*.env' \( -type l -o -perm /077 \) -print) ]] || return 1
+  (cd "$directory" && find . -maxdepth 1 -type f -name '*.env' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+}
+
+config_fingerprint() {
+  sha256sum /etc/nginx/nginx.conf "$vhost" "$staged" "$current_file" \
+    /etc/letsencrypt/live/aerocrm.space/{cert,chain,fullchain,privkey}.pem | sha256sum | cut -d' ' -f1
+}
 expected_current=$baseline_sha
 if [[ -e "$current_file" ]]; then
   [[ -f "$current_file" && ! -L "$current_file" ]] || exit 1
@@ -46,12 +122,47 @@ restore() {
   restored_sha=$(file_sha "$backup_file") || return 1
   atomic_install "$backup_file" || return 1
   nginx -t || return 1
-  systemctl reload nginx || return 1
+  service_action apply || return 1
   printf '%s\n' "$restored_sha" > "$state_dir/current.sha.tmp" || return 1
   mv -f "$state_dir/current.sha.tmp" "$current_file" || return 1
   rm -f "$pending_file" || return 1
   rm -f "$backup_file" || echo 'Old Nginx backup remains for operator cleanup' >&2
 }
+
+if [[ "$action" == recover ]]; then
+  lock=/opt/aerocrm/release.lock
+  [[ -f "$lock" && ! -L "$lock" ]] || { echo 'Recovery requires the existing regular release lock' >&2; exit 1; }
+  exec 9<"$lock"
+  [[ ! -L "$lock" && $(stat -Lc '%d:%i' /proc/self/fd/9) == $(stat -c '%d:%i' "$lock") ]] || exit 1
+  flock -n 9 || { echo 'Another frontend release is active' >&2; exit 1; }
+  marker=/opt/aerocrm/releases/frontend.sha
+  [[ -f "$marker" && ! -L "$marker" && $(cat "$marker") == "$sha" &&
+    -f "$current_file" && "$expected_current" == "$candidate_sha" && $(cat "$current_file") == "$candidate_sha" &&
+    ! -e "$pending_file" && ! -L "$pending_file" && ! -e "$backup_file" && ! -L "$backup_file" &&
+    -f "$staged" && ! -L "$staged" && $(file_sha "$staged") == "$candidate_sha" &&
+    $(file_sha "$vhost") == "$candidate_sha" ]] || { echo 'Frontend recovery state drifted' >&2; exit 1; }
+  expected_env_hash="$3"
+  [[ $(frontend_env_hash) == "$expected_env_hash" ]] || { echo 'Frontend recovery env hash mismatch' >&2; exit 1; }
+  before=$(frontend_snapshot)
+  config_before=$(config_fingerprint)
+  compose_before=$(file_sha /opt/aerocrm/compose/frontend.yml)
+  marker_before=$(file_sha "$marker")
+  nginx -t
+  service_action recover
+  verify_https
+  [[ $(frontend_snapshot) == "$before" && $(config_fingerprint) == "$config_before" &&
+    $(file_sha /opt/aerocrm/compose/frontend.yml) == "$compose_before" &&
+    $(file_sha "$marker") == "$marker_before" && $(frontend_env_hash) == "$expected_env_hash" &&
+    ! -e "$pending_file" && ! -e "$backup_file" ]] || { echo 'Frontend recovery modified immutable state' >&2; exit 1; }
+  echo 'Frontend edge recovery verified: three exact-SHA HTTPS health responses; app/config/cert/env state preserved'
+  exit 0
+fi
+
+if [[ "$action" == verify ]]; then
+  [[ $(file_sha "$vhost") == "$candidate_sha" ]] || { echo 'Live frontend vhost differs from reviewed config' >&2; exit 1; }
+  verify_https
+  exit 0
+fi
 
 if [[ "$action" == rollback ]]; then
   if [[ ! -e "$pending_file" ]]; then exit 0; fi
@@ -81,12 +192,16 @@ cp "$staged" "$candidate_copy"
 [[ $(file_sha "$candidate_copy") == "$candidate_sha" ]] || { echo 'Staged Nginx config differs from reviewed infra SHA' >&2; exit 1; }
 [[ $(file_sha "$vhost") == "$expected_current" ]] || { echo 'Live Nginx vhost drifted from reviewed baseline' >&2; exit 1; }
 nginx -t
-if [[ "$action" == check || "$expected_current" == "$candidate_sha" ]]; then exit 0; fi
+if [[ "$action" == check ]]; then exit 0; fi
+if [[ "$expected_current" == "$candidate_sha" ]]; then
+  service_action recover
+  exit 0
+fi
 
 cp "$vhost" "$backup_file"
 chmod 0600 "$backup_file"
 printf '%s\n' "$sha" > "$pending_file"
-if ! atomic_install "$candidate_copy" || ! nginx -t || ! systemctl reload nginx; then
+if ! atomic_install "$candidate_copy" || ! nginx -t || ! service_action apply; then
   restore || echo 'Nginx restore failed; root-owned backup and pending marker retained' >&2
   exit 1
 fi
