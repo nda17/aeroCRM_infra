@@ -35,6 +35,7 @@ jobs:
           node --check scripts/crm-sales-reminder-fk-migration.mjs
           node --check scripts/crm-sales-stage-next-action-migration.mjs
           node --check scripts/crm-sales-stage-duration-migration.mjs
+          node --check scripts/crm-sales-activity-text-templates-migration.mjs
           node --check scripts/risk-controls-migration.mjs
           node --check scripts/risk-controls-capabilities.mjs
           node --check scripts/backend-risk-controls-env.mjs
@@ -70,6 +71,7 @@ jobs:
           node scripts/crm-sales-reminder-fk-migration.mjs --policy-self-test
           node scripts/crm-sales-stage-next-action-migration.mjs --policy-self-test
           node scripts/crm-sales-stage-duration-migration.mjs --policy-self-test
+          node scripts/crm-sales-activity-text-templates-migration.mjs --policy-self-test
           node scripts/database-maintenance-release.mjs --policy-self-test
           node scripts/database-maintenance-rehearsal.mjs --policy-self-test
           node scripts/crm-ux-unification-migration.mjs --policy-self-test

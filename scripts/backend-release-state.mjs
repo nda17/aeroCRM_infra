@@ -48,7 +48,7 @@ function keys(object, expected) {
 export function nonReliabilityHooksDisabled(flags) {
   const otherHooks = ['billing', 'custom', 'commerce', 'intake', 'closureMigration',
     'aclRepair', 'mail', 'fileImports', 'planner', 'ux', 'collaboration', 'meeting3',
-    'telegram', 'reminderFk', 'stageNextAction', 'stageDuration'];
+    'telegram', 'reminderFk', 'stageNextAction', 'stageDuration', 'activityTextTemplates'];
   keys(flags, [...otherHooks, 'reliability']);
   assert(Object.values(flags).every(value => value === 'true' || value === 'false'),
     'Invalid migration flag');

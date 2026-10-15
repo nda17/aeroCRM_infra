@@ -53,6 +53,13 @@ const salesStageDurationInventory = {
     [salesStageDurationMigration]: 'ad14c772257dfd9f9100d0d76cd01664604cfcb2d3d5cb6a8249aaade192d541' },
   aclSha256: '52472e61fd18bbc4813887979ed4c38773e27ce3992a31fc3e6db5a4adf96330'
 };
+const salesActivityTextTemplateMigration = '20261015020000_activity_text_templates';
+const salesActivityTextTemplateInventory = {
+  migrations: { ...salesStageDurationInventory.migrations,
+    [salesActivityTextTemplateMigration]: 'f366fd6ba9a34d7b7838267a711b5ec80d386d3a6241fc557784be7987c9e1b1' },
+  aclSha256: 'bc087e393bdd34d0aa0a1c3441665fb01b04700b2960c3bd21129cf1ecfab25e'
+};
+const salesActivityTextTemplateRegistryAclSha = '4f97fa5c6f0040dbe5ca696b6aa5c882815473dc3502d85179e123d3229df66e';
 const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-storage-reviewed-inventory.json', import.meta.url)));
 const messengerEntry = messengerInventory.owners['crm-access'];
 const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
@@ -99,7 +106,8 @@ function closureImageReviewed(service, sha, execute = run) {
       : service === 'identity' ? [expected, plannerInventory.owners.identity]
         : service === 'crm-access' ? [expected, uxInventory.owners['crm-access'], collaborationInventory.owners['crm-access']] : [expected];
   if (meeting3Inventory.owners[service]) accepted.push(meeting3Inventory.owners[service]);
-  if (service === 'crm-sales') accepted.push(salesReminderFkInventory, salesStageNextActionInventory, salesStageDurationInventory);
+  if (service === 'crm-sales') accepted.push(salesReminderFkInventory, salesStageNextActionInventory,
+    salesStageDurationInventory, salesActivityTextTemplateInventory);
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
   if (reliabilityInventory.owners[service]) accepted.push(reliabilityInventory.owners[service]);
@@ -135,8 +143,74 @@ function stageDurationSalesImageReviewed(sha, execute = run) {
        .filter(entry=>entry.isDirectory()).map(entry=>[entry.name,hash(fs.readFileSync(root+'/migrations/'+entry.name+'/migration.sql'))])
        .sort(([a],[b])=>a.localeCompare(b))),aclSha256:hash(fs.readFileSync(root+'/database-access.json'))}));`
   ]));
-  try { assert.deepEqual(observed, salesStageDurationInventory); return true; }
+  try {
+    assert([salesStageDurationInventory, salesActivityTextTemplateInventory]
+      .some(expected => { try { assert.deepEqual(observed,expected); return true; } catch { return false; } }));
+    return true;
+  }
   catch { return false; }
+}
+function activityTextTemplateSalesImageCapable(image, execute = run) {
+  return JSON.parse(execute('CRM Sales activity text template capability', 'docker', [
+    'run','--rm','--network','none','--entrypoint','node',image,'-e',
+    `const fs=require('node:fs'),crypto=require('node:crypto'),root='/app/prisma';
+     const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+     const expected=${JSON.stringify(salesActivityTextTemplateInventory)};
+     const migrations=Object.fromEntries(fs.readdirSync(root+'/migrations',{withFileTypes:true})
+       .filter(x=>x.isDirectory()).map(x=>[x.name,hash(fs.readFileSync(root+'/migrations/'+x.name+'/migration.sql'))]));
+     let endpoint=false;try {
+       require('reflect-metadata');
+       const s=require('/app/dist/src/activity-text-templates/activity-text-templates.service.js');
+       const c=require('/app/dist/src/activity-text-templates/activity-text-templates.controller.js');
+       const m=require('/app/dist/src/crm-sales.module.js');
+       endpoint=s.ACTIVITY_TEXT_TEMPLATES_CAPABILITY==='activity-text-templates-v1'
+         && typeof s.ActivityTextTemplatesService?.prototype?.settings==='function'
+         && typeof s.ActivityTextTemplatesService?.prototype?.save==='function'
+         && Reflect.getMetadata('controllers',m.CrmSalesModule)?.includes(c.ActivityTextTemplatesController)
+         && Reflect.getMetadata('providers',m.CrmSalesModule)?.includes(s.ActivityTextTemplatesService);
+     } catch {}
+     console.log(JSON.stringify(endpoint &&
+       JSON.stringify(Object.entries(migrations).sort(([a],[b])=>a.localeCompare(b)))===
+       JSON.stringify(Object.entries(expected.migrations).sort(([a],[b])=>a.localeCompare(b)))
+       && hash(fs.readFileSync(root+'/database-access.json'))===expected.aclSha256));`
+  ]));
+}
+function activityTextTemplateOperationsImageCapable(image, execute = run) {
+  return JSON.parse(execute('Operations activity text template backup capability', 'docker', [
+    'run','--rm','--network','none','--entrypoint','node',image,'-e',
+    `const fs=require('node:fs'),crypto=require('node:crypto');let capable=false;try {
+      const root='/app/backup-manifests';
+      const backup=JSON.parse(fs.readFileSync(root+'/database-backup-migrations.json'));
+      const registry=JSON.parse(fs.readFileSync(root+'/database-maintenance-registry.json'));
+      const expected=${JSON.stringify(salesActivityTextTemplateInventory)};
+      const registryAclSha=${JSON.stringify(salesActivityTextTemplateRegistryAclSha)};
+      const target=backup.targets['crm-sales'];
+      const migrations=target.migrations;
+      const acl=registry.targets['crm-sales'];
+      const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
+      const actualMigrations=migrations.map(row=>[row.name,row.checksum]).sort(([a],[b])=>a.localeCompare(b));
+      const expectedMigrations=Object.entries(expected.migrations).sort(([a],[b])=>a.localeCompare(b));
+      capable=backup.schemaVersion===1 && registry.schemaVersion===1
+        && target.manifestSha256==='0764eaf8c0010c8d6e1f7483092dfcc8665792532e653a69344f12bb40c9b6fc'
+        && JSON.stringify(actualMigrations)===JSON.stringify(expectedMigrations)
+        && acl.database==='aerocrm_crm_sales' && acl.schema==='crm_sales'
+        && acl.migrationRole==='aerocrm_crm_sales_migration'
+        && acl.runtimeRole==='aerocrm_crm_sales_runtime'
+        && acl.backupRole==='aerocrm_crm_sales_backup'
+        && acl.acl.version===1 && acl.acl.service==='crm-sales'
+        && hash(JSON.stringify(acl.acl))===registryAclSha
+        && acl.aclSha256===registryAclSha
+        && JSON.stringify(acl.acl.tables.activity_text_template_settings)===JSON.stringify(['SELECT','INSERT','UPDATE'])
+        && JSON.stringify(acl.acl.tables.activity_text_template_commands)===JSON.stringify(['SELECT','INSERT']);
+    } catch {} console.log(JSON.stringify(capable));`
+  ]));
+}
+function assertActivityTextTemplateCapability({ recorded, valid, completed, salesCapable, operationsCapable }) {
+  assert([recorded,valid,completed,salesCapable,operationsCapable].every(value=>typeof value==='boolean'),
+    'Invalid CRM activity text template capability state');
+  assert(valid,'Persisted CRM activity text template migration differs from its reviewed checksum');
+  assert(!recorded || (completed && salesCapable && operationsCapable),
+    'Candidate backend images cannot preserve activity text template schema and backup capability');
 }
 function stageDurationAccessCapable(image, execute = run) {
   return JSON.parse(execute('CRM Access stage duration saved-view capability', 'docker', [
@@ -392,10 +466,17 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     'CRM Sales stage next-action guard and hook migration inventories differ');
   assert.equal(stageHook.match(/const aclSha256 = '([a-f0-9]{64})';/)?.[1],
     salesStageNextActionInventory.aclSha256, 'CRM Sales stage next-action guard and hook ACL hashes differ');
+  const activityHook = fs.readFileSync(new URL('./crm-sales-activity-text-templates-migration.mjs', import.meta.url), 'utf8');
+  const activityMigrations = activityHook.match(/const migrations = \[([\s\S]*?)\n\];/)?.[1];
+  assert(activityMigrations, 'CRM Sales activity text template hook inventory missing');
+  assert.deepEqual(Object.fromEntries([...activityMigrations.matchAll(/\['([^']+)', '([a-f0-9]{64})'\]/g)]
+    .map(([,name,checksum])=>[name,checksum])), salesActivityTextTemplateInventory.migrations);
+  assert.equal(activityHook.match(/const aclSha256 = '([a-f0-9]{64})';/)?.[1],
+    salesActivityTextTemplateInventory.aclSha256);
   const salesPairs = [closureInventory.owners['crm-sales'], importInventory.owners['crm-sales'],
     plannerInventory.owners['crm-sales'], uxInventory.owners['crm-sales'],
     meeting3Inventory.owners['crm-sales'], salesReminderFkInventory, salesStageNextActionInventory,
-    salesStageDurationInventory];
+    salesStageDurationInventory, salesActivityTextTemplateInventory];
   const reviewSales = (pair, { changedMigration = false, missingMigration = false,
     changedAcl = false, extraMigration = false } = {}) => {
     let calls = 0;
@@ -420,6 +501,7 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(Object.keys(salesReminderFkInventory.migrations).length, 8);
   assert.equal(Object.keys(salesStageNextActionInventory.migrations).length, 9);
   assert.equal(Object.keys(salesStageDurationInventory.migrations).length, 10);
+  assert.equal(Object.keys(salesActivityTextTemplateInventory.migrations).length, 11);
   assert.equal(reviewSales(meeting3Inventory.owners['crm-sales']), true,
     'The reviewed seven-migration Sales image remains available for rollback');
   assert.equal(reviewSales(salesReminderFkInventory), true,
@@ -428,6 +510,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     'The reviewed nine-migration Sales image supports stage next-action templates');
   assert.equal(reviewSales(salesStageDurationInventory), true,
     'The reviewed ten-migration Sales image supports stage duration');
+  assert.equal(reviewSales(salesActivityTextTemplateInventory), true,
+    'The reviewed eleven-migration Sales image supports activity text templates');
   assert.equal(reviewSales(salesReminderFkInventory, { changedMigration: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { missingMigration: true }), false);
   assert.equal(reviewSales(salesReminderFkInventory, { changedAcl: true }), false);
@@ -440,6 +524,8 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
   assert.equal(reviewSales(salesStageDurationInventory, { missingMigration: true }), false);
   assert.equal(reviewSales(salesStageDurationInventory, { changedAcl: true }), false);
   assert.equal(reviewSales(salesStageDurationInventory, { extraMigration: true }), false);
+  assert.equal(reviewSales(salesActivityTextTemplateInventory, { changedMigration: true }), false);
+  assert.equal(reviewSales(salesActivityTextTemplateInventory, { changedAcl: true }), false);
   let stageCalls = 0;
   assert.equal(stageDurationSalesImageReviewed('e'.repeat(40), (_label, executable, args) => {
     stageCalls++;
@@ -465,6 +551,14 @@ if (process.argv.length === 3 && process.argv[2] === '--policy-self-test') {
     salesCapable: false, accessCapable: false });
   assertStageDurationCapability({ recorded: true, valid: true, completed: true,
     salesCapable: true, accessCapable: true });
+  assertActivityTextTemplateCapability({ recorded:false, valid:true, completed:false,
+    salesCapable:false, operationsCapable:false });
+  assertActivityTextTemplateCapability({ recorded:true, valid:true, completed:true,
+    salesCapable:true, operationsCapable:true });
+  assert.throws(() => assertActivityTextTemplateCapability({ recorded:true, valid:true, completed:true,
+    salesCapable:false, operationsCapable:true }), /cannot preserve activity text template/);
+  assert.throws(() => assertActivityTextTemplateCapability({ recorded:true, valid:true, completed:true,
+    salesCapable:true, operationsCapable:false }), /cannot preserve activity text template/);
   assert.throws(() => assertStageDurationCapability({ recorded: true, valid: false, completed: false,
     salesCapable: false, accessCapable: false }), /differs from its reviewed checksum/);
   assert.throws(() => assertStageDurationCapability({ recorded: true, valid: true, completed: false,
@@ -667,6 +761,18 @@ const durationAccessRevision = run('CRM Access stage duration image revision', '
 const durationAccessCapable = durationAccessRevision === (candidateManifest?.services['crm-access'].sourceSha ?? candidateSha) &&
   stageDurationAccessCapable(durationAccessImage);
 assertStageDurationCapability({ ...durationState, salesCapable: durationSalesCapable, accessCapable: durationAccessCapable });
+const activityState = inspectDatabase(durationIdentity, `SELECT json_build_object(
+  'recorded', EXISTS(SELECT 1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesActivityTextTemplateMigration}'),
+  'valid', (SELECT count(*)<=1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesActivityTextTemplateMigration}')
+    AND NOT EXISTS(SELECT 1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesActivityTextTemplateMigration}'
+    AND (checksum<>'${salesActivityTextTemplateInventory.migrations[salesActivityTextTemplateMigration]}' OR rolled_back_at IS NOT NULL)),
+  'completed', (SELECT count(*)=1 FROM crm_sales._prisma_migrations WHERE migration_name='${salesActivityTextTemplateMigration}'
+    AND checksum='${salesActivityTextTemplateInventory.migrations[salesActivityTextTemplateMigration]}'
+    AND finished_at IS NOT NULL AND rolled_back_at IS NULL))::text;`);
+const activitySalesCapable = activityTextTemplateSalesImageCapable(candidateImage('crm-sales'));
+const activityOperationsCapable = activityTextTemplateOperationsImageCapable(candidateImage('operations'));
+assertActivityTextTemplateCapability({ ...activityState, salesCapable:activitySalesCapable,
+  operationsCapable:activityOperationsCapable });
 // Marketing authorization, v3 outcomes, unsubscribe links, refund evidence and their
 // Operations audit decoder form one permanent floor, independent of business rows.
 const riskStates = {};

@@ -15,7 +15,7 @@ const hash = char => char.repeat(64);
 const reliabilityHookFlags = Object.fromEntries([
   'billing', 'custom', 'commerce', 'intake', 'closureMigration', 'aclRepair', 'mail',
   'fileImports', 'planner', 'ux', 'collaboration', 'meeting3', 'telegram', 'stageDuration',
-  'reminderFk', 'stageNextAction', 'reliability'
+  'reminderFk', 'stageNextAction', 'activityTextTemplates', 'reliability'
 ].map(name => [name, 'false']));
 
 test('reliability recovery guard permits only reliability migration and rejects every other hook', () => {
