@@ -1,0 +1,851 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "billing": {
+      "migration": "20261015010000_crm_refund_reviews",
+      "migrations": {
+        "20260920000000_init_aerocrm": "b6a6babe34607ec210b864289d5f17b285c4924234e3570a9acf190253d85266",
+        "20260921010000_defer_crm_capacity_bindings": "9318239e1b2e2926102f643faacd852782bb64901028f9950eb586fc2d498307",
+        "20260921030000_crm_admin_seat_adjustments": "8deb754f74e6a495ad1c42774f1e7ccb27243358ff6452c62d52037d5cd81201",
+        "20260923030000_workspace_closure": "692fc4e8d1218ff2ab360b1bc33bfe7757a017095728b2b307385b82cd2756f5",
+        "20261015010000_crm_refund_reviews": "53fa0748a88b21ba71a5b982f86539e39c4d439d37d8b709ddb7e33c794d12ea"
+      },
+      "aclSha256": "04c028a21be2ba0a74f45fd40d37191e03bb9f3c70c4f2dad4db8ad10edebac9",
+      "acl": {
+        "version": 1,
+        "service": "billing",
+        "tables": {
+          "service_identity": [
+            "SELECT"
+          ],
+          "source_sequences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "identity_contact_projections": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "notification_routing_projections": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "offer_projections": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "command_receipts": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_commercial_policies": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_admin_day_grants": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_admin_seat_adjustments": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_entitlements": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_commerce_accounts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_commerce_commands": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_orders": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_paid_periods": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_auto_renewals": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_auto_renewal_consents": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_provider_operations": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_provider_deliveries": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_payment_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "outbox_events": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "integration_delivery_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "integration_delivery_failures": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "_prisma_migrations": [],
+          "workspace_closure_fences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_refund_reviews": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_refund_command_receipts": [
+            "SELECT",
+            "INSERT"
+          ]
+        },
+        "sequences": {},
+        "types": [
+          "OutboxStatus",
+          "CrmEntitlementStatus",
+          "DeliveryReceiptStatus",
+          "IntegrationErrorCategory",
+          "IntegrationFailureResolution",
+          "DeliveryFailureStatus"
+        ],
+        "routines": [
+          "reject_crm_commercial_policy_mutation",
+          "protect_aerocrm_commerce_evidence",
+          "protect_crm_admin_day_grants",
+          "protect_crm_admin_seat_adjustments",
+          "protect_crm_admin_command_receipts",
+          "enforce_service_identity_integrity",
+          "assert_workspace_open",
+          "touch_workspace_fence",
+          "guard_workspace_new_finance",
+          "guard_workspace_renewal",
+          "enforce_workspace_closure_fence",
+          "protect_crm_refund_evidence"
+        ],
+        "routineExecute": [
+          "assert_workspace_open(uuid)",
+          "touch_workspace_fence(uuid)"
+        ]
+      },
+      "beforeAclSha256": "103b05b27bd3afcbef967d8a31f2c9f9176c46fbc04b4e317eb1a7f88ee3dcd8",
+      "beforeAcl": {
+        "version": 1,
+        "service": "billing",
+        "tables": {
+          "service_identity": [
+            "SELECT"
+          ],
+          "source_sequences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "identity_contact_projections": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "notification_routing_projections": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "offer_projections": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "command_receipts": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_commercial_policies": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_admin_day_grants": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_admin_seat_adjustments": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_entitlements": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_commerce_accounts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_commerce_commands": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_orders": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_paid_periods": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_auto_renewals": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_auto_renewal_consents": [
+            "SELECT",
+            "INSERT"
+          ],
+          "crm_provider_operations": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_provider_deliveries": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "crm_payment_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "outbox_events": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "integration_delivery_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "integration_delivery_failures": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "_prisma_migrations": [],
+          "workspace_closure_fences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ]
+        },
+        "sequences": {},
+        "types": [
+          "OutboxStatus",
+          "CrmEntitlementStatus",
+          "DeliveryReceiptStatus",
+          "IntegrationErrorCategory",
+          "IntegrationFailureResolution",
+          "DeliveryFailureStatus"
+        ],
+        "routines": [
+          "reject_crm_commercial_policy_mutation",
+          "protect_aerocrm_commerce_evidence",
+          "protect_crm_admin_day_grants",
+          "protect_crm_admin_seat_adjustments",
+          "protect_crm_admin_command_receipts",
+          "enforce_service_identity_integrity",
+          "assert_workspace_open",
+          "touch_workspace_fence",
+          "guard_workspace_new_finance",
+          "guard_workspace_renewal",
+          "enforce_workspace_closure_fence"
+        ],
+        "routineExecute": [
+          "assert_workspace_open(uuid)",
+          "touch_workspace_fence(uuid)"
+        ]
+      },
+      "schemaBeforeSha256": "bfb0e747e0d0f9fa7ce0766bd245058fe52ee83fcbdbae101610ae7b7d9073d5",
+      "schemaAfterSha256": "bfac46899eb29bd3c5ba03e07444c11d8c28ff4889bb02664f85ee326bf9efa9"
+    },
+    "campaigns": {
+      "migration": "20261015010000_marketing_consent",
+      "migrations": {
+        "20260920000000_init_aerocrm": "9e8c89ec0777ff2cbfb89bfd94e88cdd58292ac1fd99056fc044953803526f9e",
+        "20261015010000_marketing_consent": "b9dfc4b834e3f1fbf53fe859342edf1280c52e46f1533343f1c644df5af6bdc3"
+      },
+      "aclSha256": "3f7169c630f726b7dd8825ad8debd97783d0119fad6d903185fc11c862ebb8c1",
+      "acl": {
+        "version": 1,
+        "service": "campaigns",
+        "tables": {
+          "service_identity": [
+            "SELECT"
+          ],
+          "campaigns": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "audience_snapshots": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "deliveries": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "control_actions": [
+            "SELECT",
+            "INSERT"
+          ],
+          "outbox_events": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "consumer_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "idempotency_records": [
+            "SELECT",
+            "INSERT"
+          ],
+          "rate_limits": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "heartbeats": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "_prisma_migrations": []
+        },
+        "sequences": {},
+        "types": [
+          "CampaignStatus",
+          "CampaignAudience",
+          "CampaignRequestedChannel",
+          "CampaignDeliveryChannel",
+          "CampaignDeliveryStatus",
+          "AudienceSnapshotStatus",
+          "CampaignControlActionKind",
+          "CampaignOutboxStatus",
+          "CampaignOutboxExchange",
+          "CampaignConsumerReceiptStatus"
+        ],
+        "routines": [
+          "protect_service_identity"
+        ]
+      },
+      "beforeAclSha256": "3f7169c630f726b7dd8825ad8debd97783d0119fad6d903185fc11c862ebb8c1",
+      "beforeAcl": {
+        "version": 1,
+        "service": "campaigns",
+        "tables": {
+          "service_identity": [
+            "SELECT"
+          ],
+          "campaigns": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "audience_snapshots": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "deliveries": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "control_actions": [
+            "SELECT",
+            "INSERT"
+          ],
+          "outbox_events": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "consumer_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "idempotency_records": [
+            "SELECT",
+            "INSERT"
+          ],
+          "rate_limits": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "heartbeats": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "_prisma_migrations": []
+        },
+        "sequences": {},
+        "types": [
+          "CampaignStatus",
+          "CampaignAudience",
+          "CampaignRequestedChannel",
+          "CampaignDeliveryChannel",
+          "CampaignDeliveryStatus",
+          "AudienceSnapshotStatus",
+          "CampaignControlActionKind",
+          "CampaignOutboxStatus",
+          "CampaignOutboxExchange",
+          "CampaignConsumerReceiptStatus"
+        ],
+        "routines": [
+          "protect_service_identity"
+        ]
+      },
+      "schemaBeforeSha256": "22a072addafa394f1ea28c6399f5b42ffc4d11dbc62fada5160d4c4a7abef84a",
+      "schemaAfterSha256": "5e225da14e1c031733a55dd9973d29e3f1fbd10b5db634b758dc432ca5e1905f"
+    },
+    "identity": {
+      "migration": "20261015010000_marketing_consent",
+      "migrations": {
+        "20260920000000_init_aerocrm": "45bef30c1974a8abdb0928fe82eb1e6f446c6420f35bbea2c44cf32177b134d2",
+        "20260920120000_oauth_workspace_client": "7c8768e78bd04d77a53a4ca5fe1bf3ab251e3bb879ccf1a8c9908af2a38b19a1",
+        "20260923030000_workspace_closure": "c870b738c75153e0d6f2883395a8ebd5dad197b87b8f2ea9262ca0c00a355be0",
+        "20261004000000_single_active_session": "d07b489fb79b7eca075e200961ab4197ad38853d99ff031915675565febbeb7d",
+        "20261015010000_marketing_consent": "12d482b7e9b8cfa1c0a1bc33abf5977b0fa6fe29bae8e36422efc64bfdf4d8f7"
+      },
+      "aclSha256": "a060bdd23cb428951d92e4f73275a31cd1fc60e036c83fe127bc74099f8a489f",
+      "acl": {
+        "version": 1,
+        "service": "identity",
+        "tables": {
+          "users": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "user_sessions": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "workspaces": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "workspace_members": [
+            "SELECT",
+            "INSERT"
+          ],
+          "workspace_invitations": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "auth_identities": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "telegram_notification_channels": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "verification_challenges": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "verification_email_attempts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "email_password_recoveries": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "login_otp_challenges": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "login_otp_rate_limits": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "auth_settings": [
+            "SELECT",
+            "UPDATE"
+          ],
+          "oauth_authorizations": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "service_identity": [
+            "SELECT"
+          ],
+          "aggregate_versions": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "source_sequences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "outbox_events": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "avatar_media_objects": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "consumer_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "consumer_failures": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "internal_command_receipts": [
+            "SELECT",
+            "INSERT"
+          ],
+          "telegram_update_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "workspace_closure_fences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "heartbeats": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "_prisma_migrations": [],
+          "marketing_email_preferences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "marketing_unsubscribe_tokens": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ]
+        },
+        "sequences": {},
+        "types": [
+          "Role",
+          "UserStatus",
+          "WorkspaceType",
+          "WorkspaceStatus",
+          "WorkspaceMemberRole",
+          "WorkspaceMemberStatus",
+          "AuthIdentityType",
+          "VerificationChallengeType",
+          "VerificationChallengePurpose",
+          "OAuthProvider",
+          "OutboxExchange",
+          "OutboxStatus",
+          "AvatarMediaObjectStatus",
+          "ConsumerReceiptStatus",
+          "ConsumerFailureStatus",
+          "TelegramBotKind",
+          "WebhookReceiptStatus"
+        ],
+        "routines": [
+          "enforce_service_identity_integrity",
+          "assert_workspace_open",
+          "guard_workspace_admission",
+          "guard_workspace_reactivation",
+          "enforce_workspace_closure_fence",
+          "enforce_single_active_session",
+          "notify_session_revoked"
+        ],
+        "routineExecute": [
+          "assert_workspace_open(uuid)"
+        ]
+      },
+      "beforeAclSha256": "ccd364a11ac413b2ae905470e9401d93aa2a13f2b1846481d2767ef970b39493",
+      "beforeAcl": {
+        "version": 1,
+        "service": "identity",
+        "tables": {
+          "users": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "user_sessions": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "workspaces": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "workspace_members": [
+            "SELECT",
+            "INSERT"
+          ],
+          "workspace_invitations": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "auth_identities": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "telegram_notification_channels": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "verification_challenges": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "verification_email_attempts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "email_password_recoveries": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "login_otp_challenges": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "login_otp_rate_limits": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "auth_settings": [
+            "SELECT",
+            "UPDATE"
+          ],
+          "oauth_authorizations": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "service_identity": [
+            "SELECT"
+          ],
+          "aggregate_versions": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "source_sequences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "outbox_events": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "avatar_media_objects": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "consumer_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "consumer_failures": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "internal_command_receipts": [
+            "SELECT",
+            "INSERT"
+          ],
+          "telegram_update_receipts": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "workspace_closure_fences": [
+            "SELECT",
+            "INSERT",
+            "UPDATE"
+          ],
+          "heartbeats": [
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ],
+          "_prisma_migrations": []
+        },
+        "sequences": {},
+        "types": [
+          "Role",
+          "UserStatus",
+          "WorkspaceType",
+          "WorkspaceStatus",
+          "WorkspaceMemberRole",
+          "WorkspaceMemberStatus",
+          "AuthIdentityType",
+          "VerificationChallengeType",
+          "VerificationChallengePurpose",
+          "OAuthProvider",
+          "OutboxExchange",
+          "OutboxStatus",
+          "AvatarMediaObjectStatus",
+          "ConsumerReceiptStatus",
+          "ConsumerFailureStatus",
+          "TelegramBotKind",
+          "WebhookReceiptStatus"
+        ],
+        "routines": [
+          "enforce_service_identity_integrity",
+          "assert_workspace_open",
+          "guard_workspace_admission",
+          "guard_workspace_reactivation",
+          "enforce_workspace_closure_fence",
+          "enforce_single_active_session",
+          "notify_session_revoked"
+        ],
+        "routineExecute": [
+          "assert_workspace_open(uuid)"
+        ]
+      },
+      "schemaBeforeSha256": "49db8de4ba28c3768b70ee8c2ba49c0c672620a13a6ffa8b4c57b25a284fd1e9",
+      "schemaAfterSha256": "eaf66ac9e50d5f750f4ee9fba51b29b79323743f38ec443d52e68269cbfffbd3"
+    }
+  },
+  "capabilityInventories": {
+    "notification-delivery": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "33976a4478f5ba7f960f1afdcfba7d76caf80f9e3998ad6fd175ec4a4ce4bceb",
+        "20260920010000_crm_runtime_contracts": "2ed176683aa3ba406e865df9b22b6fa31e880b45cef0cf7692bd3ecc57c4b3dc",
+        "20260923030000_workspace_closure": "b451c18521ba07170352e55e8ab6e47f59937375bd7a9a4498c57d16c1bf49b5"
+      },
+      "aclSha256": "27c3c403047ef9ca046f408a2f9f39925f478721b03e2b8b96c84e83022d6294"
+    },
+    "operations": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "a0479e73250ee4526daa3ef9af95652991758a60e7fa76c9c044233ff500720b",
+        "20260920010000_seed_operations_service_identity": "3bde7a3c10cee2687eea7868943bd53efe3e7be02c9a930a879fe12b84675f63"
+      },
+      "aclSha256": "86470251ebf45331b6f009315a6176c3d6964c2595deb9bc064d40d8b03f868d"
+    }
+  }
+}

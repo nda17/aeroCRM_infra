@@ -5,10 +5,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { riskControlsRoutes } from './backend-risk-controls-env.mjs';
+import { assertScopedS3Principals } from './backend-s3-principals.mjs';
 import { reliabilityRoleEnvironmentFields } from './backend-reliability-env.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const input = parseEnv(fs.readFileSync(path.join(root, '.env'), 'utf8'));
+assertScopedS3Principals(input);
+if (input.MARKETING_PUBLIC_ORIGIN && input.MARKETING_PUBLIC_ORIGIN !== 'https://aerocrm.space')
+  throw new Error('Reviewed marketing public origin must be https://aerocrm.space');
 const generated = parseEnv(fs.readFileSync(path.join(root, '.deploy/runtime-secrets.env'), 'utf8'));
 const required = (source, key) => {
   if (!source[key]?.trim()) throw new Error(`Missing private input: ${key}`);
@@ -125,6 +130,9 @@ for (const [service, role, port, explicit] of roles) {
     { NOTIFICATION_DELIVERY_KINDS: ['campaign-email', 'campaign-telegram', 'daily-summary-delivery-telegram', 'crm-invitation-email',
       'crm-task-reminder-email', 'crm-task-reminder-telegram', 'crm-intake-sla-email', 'crm-intake-sla-telegram',
       'support-team-email', 'support-team-telegram', 'support-client-email', 'subscription-expiry-telegram', 'operations-backup-report-telegram'].join(',') });
+  if (service === 'identity' && isApi || service === 'notification-delivery') Object.assign(env, {
+    MARKETING_EMAIL_ENABLED: booleanInput('MARKETING_EMAIL_ENABLED'),
+    MARKETING_PUBLIC_ORIGIN: input.MARKETING_PUBLIC_ORIGIN || 'https://aerocrm.space' });
   if (service === 'campaigns') Object.assign(env, identityClient('CAMPAIGNS'), base('BILLING'), tokens(['BILLING_CAMPAIGNS_TOKEN', 'CAMPAIGNS_OPERATIONS_TOKEN']));
   if (service === 'reporting') Object.assign(env, identityClient('REPORTING'), base('OPERATIONS'), tokens(['REPORTING_INTERNAL_TOKEN', 'REPORTING_OPERATIONS_TOKEN']));
   if (service === 'billing' && !isPublisher) Object.assign(env, identityClient('BILLING'),
@@ -421,7 +429,8 @@ const routes = [
     "upstreamUrl": "http://127.0.0.1:5310",
     "authPolicy": "crm-source",
     "timeoutMs": 60000
-  }
+  },
+  ...riskControlsRoutes
 ];
 if (routes.some(route => !route.upstreamUrl.startsWith('http://127.0.0.1:') || /widgets/.test(route.pathPrefix))) throw new Error('Unsafe Gateway route');
 write('backend/api-gateway.env', { ...shared, GATEWAY_PORT: '4100', GATEWAY_LISTEN_HOST: '127.0.0.1',

@@ -464,6 +464,32 @@ and verify all public HTTPS revisions before CI reports success. The APK route
 resolves `s3.twcstorage.ru` at request time; an unavailable S3 DNS resolver can
 affect APK downloads without preventing the three frontend sites from starting.
 
+## Risk controls release
+
+The `risk-controls-release.yml` wrapper uses the canonical full-backend release
+transaction for the Identity/Campaigns marketing-consent and Billing refund-review
+migrations. Before stopping application writers, it proves all five semantic image
+contracts (Identity, Notification Delivery, Campaigns, Billing and Operations), exact
+OCI revisions, complete migration inventories, PG18 catalogs and existing ACLs.
+The three-owner migration env hash covers sorted Billing, Campaigns and Identity
+env-file hashes. Once any new migration is recorded, mixed manifests must retain
+all five compatible readers/consumers; recovery uses the exact target tuple rather
+than an old binary. The existing Sales/Access and Mail rollback floors still apply.
+
+The env candidate preserves the Identity/Notification Delivery token pair, enables
+marketing consent checks and the fixed public origin in those two roles, and adds
+only the reviewed optional unsubscribe and required admin-refund Gateway routes.
+Unsubscribe accepts JSON body tokens; RFC8058/query-token activation is excluded.
+New candidates reject the known retired shared S3 administrator fingerprint without
+rewriting historical snapshots or revoking credentials used outside aeroCRM.
+
+If the scoped Campaigns migration env is absent, the wrapper transports the exact
+reviewed credential through the temporary `CRM_RISK_CAMPAIGNS_MIGRATION_ENV` secret.
+Under the shared release lock, a read-only login proves the unprivileged migration
+owner before create-only installation; an existing file must have identical bytes.
+No credential rotation or privilege expansion occurs. Runner and remote staged
+copies are removed; the operator removes the temporary GitHub secret after the job.
+
 ## Reliability and retention release
 
 `aeroCRM_monorepo/.github/workflows/crm-reliability-release.yml` runs the exact

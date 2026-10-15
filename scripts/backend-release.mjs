@@ -16,6 +16,9 @@ import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { storageCopyOriginInfra, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
   validateCommittedStorageRecovery } from './backend-storage-prisma-recovery.mjs';
 import { stageMailEnvironment } from './backend-mail-env.mjs';
+import { stageRiskControlsEnvironment } from './backend-risk-controls-env.mjs';
+import { assertScopedS3Principals } from './backend-s3-principals.mjs';
+import { prepareRiskControlsWriters } from './risk-controls-capabilities.mjs';
 import { stageReliabilityEnvironment, validateReliabilityBundle } from './backend-reliability-env.mjs';
 import { reliabilityRecoveryHash, postDdlRecoveryHash, amendReliabilityPending,
   validateReliabilityAmendedPending, amendPostDdlReliabilityPending,
@@ -49,9 +52,15 @@ assert(/^[0-9]+$/.test(process.env.CI_RUN_ID ?? ''));
 assert(args.length >= 3 && args.length <= 37, 'Invalid backend release argument count');
 const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, commerceHash],
   [intake, intakeHash], [closureMigration, closureHash], [aclRepair, aclHash], [mail, mailHash], [fileImports, fileImportsHash], [planner, plannerHash], [ux, uxHash], [collaboration, collaborationHash], [meeting3, meeting3Hash], [telegram, telegramHash], [reminderFk, reminderFkHash], [reliability, reliabilityHash], [stageNextAction, stageNextActionHash], [stageDuration, stageDurationHash]];
+const riskControls = process.env.RISK_CONTROLS_MIGRATION ?? 'false';
+const riskControlsHash = process.env.RISK_CONTROLS_MIGRATION_ENV_HASH ?? '';
+const riskControlsBeforeHash = process.env.RISK_CONTROLS_ENV_BEFORE_HASH ?? '';
+assert(['true', 'false'].includes(riskControls));
+assert(riskControls === 'true' ? [riskControlsHash, riskControlsBeforeHash].every(value => /^[a-f0-9]{64}$/.test(value)) :
+  !riskControlsHash && !riskControlsBeforeHash, 'Invalid risk controls migration/env contract');
 const otherHooksDisabled = nonReliabilityHooksDisabled({ billing, custom, commerce, intake,
   closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3,
-  telegram, reminderFk, reliability, stageNextAction, stageDuration });
+  telegram, reminderFk, reliability, stageNextAction, stageDuration }) && riskControls === 'false';
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
@@ -89,7 +98,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk, reliability, stageNextAction, stageDuration];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk, reliability, stageNextAction, stageDuration, riskControls];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -148,7 +157,7 @@ assert(reliabilityEnvInstall !== 'true' || (mailEnvInstall === 'false' && chatEn
   flags.every(value => value === 'false' || value === reliability) && uniformManifest(manifest)),
   'Reliability env requires an isolated full backend manifest');
 const envInstall = mailEnvInstall === 'true' || chatEnvInstall === 'true' || telegramEnvInstall === 'true' ||
-  storageInstall || reliabilityEnvInstall === 'true';
+  storageInstall || reliabilityEnvInstall === 'true' || riskControls === 'true';
 if (reminderFk === 'true')
   assert(flags.filter(value => value === 'true').length === 1 && !envInstall,
     'CRM Sales reminder FK migration must be an isolated full-manifest release');
@@ -158,7 +167,11 @@ if (stageNextAction === 'true')
 if (stageDuration === 'true')
   assert(flags.filter(value => value === 'true').length === 1 && !envInstall,
     'CRM Sales stage duration migration must be an isolated full-manifest release');
-const envBeforeHash = reliabilityEnvInstall === 'true' ? reliabilityBeforeHash : storageInstall ? storageBeforeHash :
+if (riskControls === 'true')
+  assert(flags.filter(value => value === 'true').length === 1 && mailEnvInstall === 'false' && chatEnvInstall === 'false' &&
+    telegramEnvInstall === 'false' && !storageInstall && reliabilityEnvInstall === 'false' && uniformManifest(manifest),
+    'Risk controls require an isolated full-manifest migration and deterministic env stage');
+const envBeforeHash = riskControls === 'true' ? riskControlsBeforeHash : reliabilityEnvInstall === 'true' ? reliabilityBeforeHash : storageInstall ? storageBeforeHash :
   chatEnvInstall === 'true' ? chatEnvBeforeHash : telegramEnvInstall === 'true' ? telegramEnvBeforeHash : mailEnvBeforeHash;
 assert(!migrationRequested || uniformManifest(manifest),
   'Reviewed migration hooks require a full backend manifest; run CI with force_full_backend');
@@ -199,6 +212,10 @@ function validateEnv(directory) {
     assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === 0o600,
       'Environment files must be private regular files with mode 0600');
   }
+}
+function assertTargetS3Principals(directory) {
+  for (const name of fs.readdirSync(directory).filter(value => value.endsWith('.env')))
+    assertScopedS3Principals(parseEnv(privateBytes(`${directory}/${name}`).toString('utf8')));
 }
 function closureGate(directory) {
   const runtimes = ['crm-access-api', 'crm-access-worker', 'crm-access-outbox-publisher'];
@@ -590,6 +607,14 @@ function completeStorageCutover() {
     backupObjectsPreserved: true, supportSourceDeleted: false, supportDeleteReady: true }));
 }
 function runMigrations() {
+  if (riskControls === 'true') {
+    prepareRiskControlsWriters({
+      preflight: () => execute('Risk controls image/catalog/ACL preflight before stopping writers', process.execPath,
+        [`${stagedRoot}/scripts/risk-controls-migration.mjs`, '--preflight', sha, riskControlsHash], { cwd: root }),
+      runtime,
+      stop: writers => execute('Drain all backend risk-controls writers', 'docker', ['stop', '-t', '60', ...writers])
+    });
+  }
   if (storageInstall) runStorageCutover();
   if (chatEnvInstall === 'true') {
     const bundleFile = `${stagedRoot}/crm-access-chat-env.json`;
@@ -614,7 +639,8 @@ function runMigrations() {
     ['crm-sales-reminder-fk-migration.mjs', reminderFk, reminderFkHash],
     ['crm-reliability-migration.mjs', reliability, reliabilityHash],
     ['crm-sales-stage-next-action-migration.mjs', stageNextAction, stageNextActionHash],
-    ['crm-sales-stage-duration-migration.mjs', stageDuration, stageDurationHash]];
+    ['crm-sales-stage-duration-migration.mjs', stageDuration, stageDurationHash],
+    ['risk-controls-migration.mjs', riskControls, riskControlsHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
   if (aclRepair === 'true') execute('Reviewed identity closure ACL repair', process.execPath,
@@ -683,7 +709,9 @@ if (envInstall) {
   assert.equal(sourceState.envHash, envBeforeHash, 'Reviewed Customers before env hash mismatch');
   const candidate = `${stagedRoot}/private-env-candidate-${randomUUID()}`;
   try {
-    if (reliabilityEnvInstall === 'true') {
+    if (riskControls === 'true') stageRiskControlsEnvironment({
+      sourceDirectory: `${configDirectory(sourceState)}/env/backend`, candidateDirectory: candidate });
+    else if (reliabilityEnvInstall === 'true') {
       const bundleFile = `${stagedRoot}/crm-reliability-env.json`;
       assert.equal(validateReliabilityBundle(privateBytes(bundleFile), reliabilityBundleHash).phase, reliabilityPhase,
         'Reliability bundle phase mismatch');
@@ -702,10 +730,14 @@ if (envInstall) {
       bundleHash: mailEnvBundleHash, sourceDirectory: `${configDirectory(sourceState)}/env/backend`,
       candidateDirectory: candidate });
     validateEnv(candidate);
+    assertTargetS3Principals(candidate);
     assert.equal(envHash(candidate), expectedEnvHash, 'Reviewed Customers after env hash mismatch');
     snapshot(target, `${stagedRoot}/compose`, candidate);
   } finally { fs.rmSync(candidate, { recursive: true, force: true }); }
-} else snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
+} else {
+  assertTargetS3Principals(`${root}/env/backend`);
+  snapshot(target, `${stagedRoot}/compose`, `${root}/env/backend`);
+}
 rolesForPlan(expectedEffectivePlan(target), true, true);
 if (pending && stateKey(pending.target) !== stateKey(target)) {
   if (reliabilityEnvInstall === 'true') {

@@ -23,6 +23,7 @@ case "${1:-}" in
   --crm-planner-customization) checked_scripts=(crm-planner-customization-migration.mjs) ;;
   --meeting3) checked_scripts=(meeting3-migration.mjs) ;;
   --telegram-business) checked_scripts=(telegram-business-migration.mjs backend-telegram-business-env.mjs) ;;
+  --risk-controls) checked_scripts=(risk-controls-migration.mjs risk-controls-capabilities.mjs backend-risk-controls-env.mjs backend-s3-principals.mjs backend-rollback-compatibility-guard.mjs) ;;
   --crm-reliability) checked_scripts=(crm-reliability-migration.mjs backend-reliability-env.mjs backend-rollback-compatibility-guard.mjs) ;;
   --workspace-collaboration) checked_scripts=(workspace-collaboration-migration.mjs) ;;
   --crm-ux-unification) checked_scripts=(crm-ux-unification-migration.mjs) ;;

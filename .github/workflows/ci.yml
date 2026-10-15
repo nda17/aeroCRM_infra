@@ -35,6 +35,11 @@ jobs:
           node --check scripts/crm-sales-reminder-fk-migration.mjs
           node --check scripts/crm-sales-stage-next-action-migration.mjs
           node --check scripts/crm-sales-stage-duration-migration.mjs
+          node --check scripts/risk-controls-migration.mjs
+          node --check scripts/risk-controls-capabilities.mjs
+          node --check scripts/backend-risk-controls-env.mjs
+          node --check scripts/backend-s3-principals.mjs
+          node --test scripts/risk-controls.test.mjs
           node --check scripts/database-maintenance-release.mjs
           node --check scripts/database-maintenance-rehearsal.mjs
           node --check scripts/crm-ux-unification-migration.mjs

@@ -146,7 +146,12 @@ function imageInventory(identity, sha, manifest) {
   assert(!acl.columnPrivileges || Object.keys(acl.columnPrivileges).length === 0);
   return acl;
 }
-export function aclSql(identity, acl, verifyOnly = false) {
+export function aclSql(identity, acl, verifyOnly = false, options = {}) {
+  assert(verifyOnly || Object.keys(options).length === 0, 'ACL grant options are read-only inspection only');
+  assert(Object.keys(options).every(key => key === 'backupTables'));
+  const backupTables = options.backupTables ?? Object.keys(acl.tables);
+  assert(Array.isArray(backupTables) && new Set(backupTables).size === backupTables.length &&
+    backupTables.every(name => Object.hasOwn(acl.tables, name)));
   const {schema,owner,runtime,backup} = identity;
   const statements = ['BEGIN;',"SET LOCAL lock_timeout='5s';","SET LOCAL statement_timeout='30s';",
     `REVOKE ALL ON ALL TABLES IN SCHEMA ${ident(schema)} FROM PUBLIC, ${ident(runtime)}, ${ident(backup)};`,
@@ -210,7 +215,7 @@ export function aclSql(identity, acl, verifyOnly = false) {
       THEN RAISE EXCEPTION 'CRM reliability role must be unprivileged'; END IF;`);
   for (const [table, allowed] of Object.entries(acl.tables)) {
     for (const privilege of privileges) statements.push(`IF has_table_privilege(${literal(runtime)},${literal(`${schema}.${table}`)},${literal(privilege)}) IS DISTINCT FROM ${allowed.includes(privilege)}
-      OR has_table_privilege(${literal(backup)},${literal(`${schema}.${table}`)},${literal(privilege)}) IS DISTINCT FROM ${privilege === 'SELECT'}
+      OR has_table_privilege(${literal(backup)},${literal(`${schema}.${table}`)},${literal(privilege)}) IS DISTINCT FROM ${privilege === 'SELECT' && backupTables.includes(table)}
       THEN RAISE EXCEPTION 'CRM reliability table ACL differs: ${table}/${privilege}'; END IF;`);
   }
   for (const [sequence, allowed] of Object.entries(acl.sequences)) {

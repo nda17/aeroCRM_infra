@@ -235,6 +235,11 @@ if [[ "$crm_sales_stage_duration_migration" == true ]]; then
 else
   [[ -z "$crm_sales_stage_duration_migration_env_hash" ]] || exit 64
 fi
+if [[ "${RISK_CONTROLS_MIGRATION:-false}" == true ]]; then
+  [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" &&
+    "${RISK_CONTROLS_MIGRATION_ENV_HASH:-}" =~ ^[a-f0-9]{64}$ &&
+    "${RISK_CONTROLS_ENV_BEFORE_HASH:-}" =~ ^[a-f0-9]{64}$ ]] || exit 64
+fi
 # The staged backend controller acquires the shared lock before any configuration mutation.
 if [[ "$role" == backend && -n "${BACKEND_MANIFEST_PATH:-}" ]]; then
   node_bin=/opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node

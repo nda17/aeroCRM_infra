@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { parseEnv } from 'node:util';
+import { riskControlsImageCapable, riskControlsServices, assertRiskControlsCapability } from './risk-controls-capabilities.mjs';
+import { verifyHistory as verifyRiskControlsHistory } from './risk-controls-migration.mjs';
 import { auditedMessengerAttemptSql } from './backend-storage-prisma-recovery.mjs';
 
 const [candidateSha, ...modes] = process.argv.slice(2);
@@ -55,6 +57,7 @@ const messengerInventory = JSON.parse(fs.readFileSync(new URL('./messenger-stora
 const messengerEntry = messengerInventory.owners['crm-access'];
 const telegramInventory = JSON.parse(fs.readFileSync(new URL('./telegram-business-reviewed-inventory.json', import.meta.url)));
 const telegramEntry = telegramInventory.owners['crm-access'];
+const riskInventory = JSON.parse(fs.readFileSync(new URL('./risk-controls-reviewed-inventory.json', import.meta.url)));
 const reliabilityInventory = JSON.parse(fs.readFileSync(new URL('./crm-reliability-reviewed-inventory.json', import.meta.url)));
 const collaborationInventory = JSON.parse(fs.readFileSync(new URL('./workspace-collaboration-reviewed-inventory.json', import.meta.url)));
 const uxInventory = JSON.parse(fs.readFileSync(new URL('./crm-ux-unification-reviewed-inventory.json', import.meta.url)));
@@ -100,6 +103,7 @@ function closureImageReviewed(service, sha, execute = run) {
   if (messengerInventory.owners[service]) accepted.push(messengerInventory.owners[service]);
   if (telegramInventory.owners[service]) accepted.push(telegramInventory.owners[service]);
   if (reliabilityInventory.owners[service]) accepted.push(reliabilityInventory.owners[service]);
+  if (riskInventory.owners[service]) accepted.push(riskInventory.owners[service]);
   const image = `aerocrm/${service}:${sha}`;
   const revision = execute(`${service} closure image revision`, 'docker', ['image', 'inspect',
     '--format', '{{ index .Config.Labels "org.opencontainers.image.revision" }}', image]);
@@ -663,6 +667,25 @@ const durationAccessRevision = run('CRM Access stage duration image revision', '
 const durationAccessCapable = durationAccessRevision === (candidateManifest?.services['crm-access'].sourceSha ?? candidateSha) &&
   stageDurationAccessCapable(durationAccessImage);
 assertStageDurationCapability({ ...durationState, salesCapable: durationSalesCapable, accessCapable: durationAccessCapable });
+// Marketing authorization, v3 outcomes, unsubscribe links, refund evidence and their
+// Operations audit decoder form one permanent floor, independent of business rows.
+const riskStates = {};
+for (const [service, entry] of Object.entries(riskInventory.owners)) {
+  const identity = readDatabaseUrl(`/opt/aerocrm/env/migrations/${service}.env`, `${service.toUpperCase()}_DATABASE_URL`, {
+    database: `aerocrm_${service}`, role: `aerocrm_${service}_migration`, schema: service
+  });
+  const rows = inspectDatabase(identity, `SELECT coalesce(json_agg(row_to_json(m) ORDER BY migration_name),'[]'::json)::text
+    FROM (SELECT migration_name,checksum,finished_at IS NOT NULL AS finished,rolled_back_at IS NOT NULL AS rolled_back
+      FROM ${service}._prisma_migrations) m;`);
+  const completed = verifyRiskControlsHistory(service, rows);
+  riskStates[service] = { recorded: rows.some(row => row.migration_name === entry.migration), valid: true, completed };
+}
+const riskCapabilities = Object.fromEntries(riskControlsServices.map(service => {
+  const image = candidateImage(service), revision = candidateManifest?.services[service].sourceSha ?? candidateSha;
+  return [service, riskControlsImageCapable(service, image, revision,
+    riskInventory.owners[service] || riskInventory.capabilityInventories[service], run)];
+}));
+assertRiskControlsCapability(riskStates, riskCapabilities);
 const customRolesCompatible = crmCapabilities[0] && crmCapabilities[1];
 const adminSeatsCompatible = crmCapabilities[2] && billingCapabilities[0];
 if (customRolesCompatible && adminSeatsCompatible && salesCapabilities[0] && mailCapabilities[0] &&
