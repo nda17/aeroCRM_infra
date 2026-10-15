@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "crm-sales": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "e9cf8e4a39ea31ea0663edea98e8fe97ebb50ee68be9bc1e8b3f8d8d3a6c2c9a",
+        "20260923010000_sales_commerce": "04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433",
+        "20260923030000_workspace_closure": "bb118b4953dbb143cd79e8c6b1c453958c88a38ac709bc57e1c33235c29e7d4a",
+        "20261001000000_crm_file_imports": "d2c22df0df205a6b877db8cbc63cd79ad282597503f2cef7ae296a1bc668cd3a",
+        "20261004000000_planner_customization": "36c56d3211d194b511b433222568ed3b9ae0d6f46b0bf45b41afe65b3f9289ad",
+        "20261005000000_interaction_results": "1d1c8a5544ed021ca18f74c240530f715d6e5086c9c889fb8977ff8a0037fd75",
+        "20261007030000_meeting3_workflows": "cff0bc656ed9067d4301c9810f54ecdb14190469a78456e1234cb1c048b26062",
+        "20261013000000_reminder_delivery_foreign_keys": "196d9b7073b3d64cfcc64e619f7c864a2385aedf5086067245ed5ef3c3819aa8",
+        "20261014010000_stage_next_action_templates": "4b46859b917757ddbfb4e14cfe17cbbfbf8a5e11a8dc5de083c743a7d02a138b",
+        "20261014020000_stage_duration_control": "ad14c772257dfd9f9100d0d76cd01664604cfcb2d3d5cb6a8249aaade192d541",
+        "20261015020000_activity_text_templates": "f366fd6ba9a34d7b7838267a711b5ec80d386d3a6241fc557784be7987c9e1b1",
+        "20261016010000_sales_productivity": "0dd202c10a21bd1b434c48b7890c2fdca7e683761947d401933b06a3cac48506",
+        "20261016011000_sales_productivity_timeline_details": "c867b0580f87495d1fa493c45bb6bf71bab4df6bf598d76870ad893cb8322d39"
+      },
+      "aclSha256": "65c599b24b4776371d03ccef187c28407f18336794c456f318ce8b70bcf11336",
+      "newTables": {
+        "loss_reason_settings": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "loss_reason_commands": [
+          "SELECT",
+          "INSERT"
+        ],
+        "bulk_assignment_commands": [
+          "SELECT",
+          "INSERT"
+        ]
+      },
+      "newRoutines": [],
+      "newTriggers": [
+        "bulk_assignment_commands:bulk_assignment_commands_append_only:reject_reminder_command_mutation",
+        "bulk_assignment_commands:bulk_assignment_commands_no_truncate:reject_reminder_command_mutation",
+        "bulk_assignment_commands:guard_workspace_closure:guard_workspace_business_write",
+        "loss_reason_commands:guard_workspace_closure:guard_workspace_business_write",
+        "loss_reason_commands:loss_reason_commands_append_only:reject_reminder_command_mutation",
+        "loss_reason_commands:loss_reason_commands_no_truncate:reject_reminder_command_mutation",
+        "loss_reason_settings:guard_workspace_closure:guard_workspace_business_write",
+        "loss_reason_settings:loss_reason_settings_live_change:notify_live_change"
+      ],
+      "newColumns": [
+        "bulk_assignment_commands:command_id:uuid:true",
+        "bulk_assignment_commands:workspace_id:uuid:true",
+        "bulk_assignment_commands:actor_subject:character varying(256):true",
+        "bulk_assignment_commands:actor_membership_id:uuid:false",
+        "bulk_assignment_commands:request_hash:character(64):true",
+        "bulk_assignment_commands:result:jsonb:true",
+        "bulk_assignment_commands:created_at:timestamp(3) without time zone:true",
+        "loss_reason_commands:command_id:uuid:true",
+        "loss_reason_commands:workspace_id:uuid:true",
+        "loss_reason_commands:actor_subject:character varying(256):true",
+        "loss_reason_commands:actor_membership_id:uuid:false",
+        "loss_reason_commands:request_hash:character(64):true",
+        "loss_reason_commands:result:jsonb:true",
+        "loss_reason_commands:created_at:timestamp(3) without time zone:true",
+        "loss_reason_settings:workspace_id:uuid:true",
+        "loss_reason_settings:version:integer:true",
+        "loss_reason_settings:reasons:jsonb:true",
+        "loss_reason_settings:created_at:timestamp(3) without time zone:true",
+        "loss_reason_settings:updated_at:timestamp(3) without time zone:true"
+      ],
+      "dealColumns": [
+        "deals:lost_at:timestamp(3) without time zone:false",
+        "deals:loss_reason_id:uuid:false",
+        "deals:loss_reason_title:character varying(200):false"
+      ],
+      "timelineDetailsCheckSha256": "01785e796909e23779c19a089043ee2d3123cc9bbe6d1868974e32d42e38b735"
+    },
+    "crm-customers": {
+      "migrations": {
+        "20260920000000_init_aerocrm": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b",
+        "20260923030000_workspace_closure": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c",
+        "20260928000000_corporate_mail": "0f21487e131384fef83494d962f474545523ee1a215c5ae1a5928f436919e05f",
+        "20260928010000_mail_reply_guard_alias": "3f613866d369e94ff20449dbd3a7ec468755cafcb7677f136dd3c7ff04aff8c4",
+        "20260928020000_mail_notifications": "ca04041709feb4ab1f9c612460d53efe2cc0dbf53d30e08cf36310a17ec3facc",
+        "20260929000000_mail_workspace": "464b7b587b3cbb14fa44f6d6f46539941fd1a48723e902b177ffc7647b6a013c",
+        "20261001000000_crm_file_imports": "f576f71658ed8355711810df235a0d267eb575fe86cd6c4009db8cd7a574c44f",
+        "20261005010000_mail_live_notifications": "77f9df9231f3793440c473bbcf084d69fa2cc61ebc8bb8634115a3ab5683eea1",
+        "20261014000000_mail_keyring": "b33dbe784170e67c730739aaf5f20a05ef80f28f609e9ca687bcfa775eb921f4",
+        "20261016010000_mail_templates": "f6715d07c7ffa0de3d03d4adaf8791bd954780dd9033058df6c12b9f1166675e"
+      },
+      "aclSha256": "729f78e8084c51caeb03131b61ebb0f1568c2ae65f68eb0e7398c6d63ab07b3b",
+      "newTables": {
+        "mail_template_settings": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "mail_template_commands": [
+          "SELECT",
+          "INSERT"
+        ]
+      },
+      "newRoutines": [
+        "reject_mail_template_command_mutation"
+      ],
+      "newTriggers": [
+        "mail_template_commands:guard_workspace_closure:guard_workspace_business_write",
+        "mail_template_commands:mail_template_commands_append_only:reject_mail_template_command_mutation",
+        "mail_template_commands:mail_template_commands_no_truncate:reject_mail_template_command_mutation",
+        "mail_template_settings:guard_workspace_closure:guard_workspace_business_write",
+        "mail_template_settings:mail_template_settings_live_change:notify_live_change"
+      ],
+      "newColumns": [
+        "mail_template_commands:command_id:uuid:true",
+        "mail_template_commands:workspace_id:uuid:true",
+        "mail_template_commands:actor_subject:character varying(256):true",
+        "mail_template_commands:actor_membership_id:uuid:true",
+        "mail_template_commands:request_hash:character(64):true",
+        "mail_template_commands:result:jsonb:true",
+        "mail_template_commands:created_at:timestamp(3) without time zone:true",
+        "mail_template_settings:workspace_id:uuid:true",
+        "mail_template_settings:version:integer:true",
+        "mail_template_settings:templates:jsonb:true",
+        "mail_template_settings:created_at:timestamp(3) without time zone:true",
+        "mail_template_settings:updated_at:timestamp(3) without time zone:true"
+      ]
+    }
+  },
+  "operations": {
+    "crm-sales": {
+      "manifestSha256": "fd30a7ae7660256af498df25e863d183ddcdd7dbe2bca45176bd4ff9d344a618",
+      "registryAclSha256": "f65e4de63f3c602874a28ff6ea4e2fe30c5b6716254ad58b775154769db21fe2"
+    },
+    "crm-customers": {
+      "manifestSha256": "7eac5abe53dd4d8cb87b093db3bdc78ad1cd15d0c46fe9f51979a1c7c0ec66e4",
+      "registryAclSha256": "5e759bd7d045afd05837a4f64b97adf1c2467f4351e5d540a4dd72daf232ace3"
+    }
+  }
+}

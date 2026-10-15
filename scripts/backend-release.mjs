@@ -55,12 +55,18 @@ const flagPairs = [[billing, billingHash], [custom, customHash], [commerce, comm
 const riskControls = process.env.RISK_CONTROLS_MIGRATION ?? 'false';
 const riskControlsHash = process.env.RISK_CONTROLS_MIGRATION_ENV_HASH ?? '';
 const riskControlsBeforeHash = process.env.RISK_CONTROLS_ENV_BEFORE_HASH ?? '';
+const salesProductivity = process.env.SALES_PRODUCTIVITY_MIGRATION ?? 'false';
+const salesProductivityHash = process.env.SALES_PRODUCTIVITY_MIGRATION_ENV_HASH ?? '';
+assert(['true', 'false'].includes(salesProductivity));
+assert(salesProductivity === 'true' ? /^[a-f0-9]{64}$/.test(salesProductivityHash) : !salesProductivityHash,
+  'Invalid Sales productivity migration/env contract');
 assert(['true', 'false'].includes(riskControls));
 assert(riskControls === 'true' ? [riskControlsHash, riskControlsBeforeHash].every(value => /^[a-f0-9]{64}$/.test(value)) :
   !riskControlsHash && !riskControlsBeforeHash, 'Invalid risk controls migration/env contract');
 const otherHooksDisabled = nonReliabilityHooksDisabled({ billing, custom, commerce, intake,
   closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3,
-  telegram, reminderFk, reliability, stageNextAction, stageDuration, activityTextTemplates }) && riskControls === 'false';
+  telegram, reminderFk, reliability, stageNextAction, stageDuration, activityTextTemplates }) &&
+  riskControls === 'false' && salesProductivity === 'false';
 for (const [enabled, hash] of flagPairs) {
   assert(['true', 'false'].includes(enabled), 'Invalid migration flag');
   assert(enabled === 'true' ? /^[a-f0-9]{64}$/.test(hash) : hash === '', 'Invalid migration env hash');
@@ -98,7 +104,7 @@ const stateFile = `${releases}/backend-state.json`;
 const pendingFile = `${releases}/backend-release.pending.json`;
 const previousFile = `${releases}/backend-previous-state.json`;
 const zeroHash = '0'.repeat(64);
-const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk, reliability, stageNextAction, stageDuration, activityTextTemplates, riskControls];
+const flags = [billing, custom, commerce, intake, closureMigration, aclRepair, mail, fileImports, planner, ux, collaboration, meeting3, telegram, reminderFk, reliability, stageNextAction, stageDuration, activityTextTemplates, riskControls, salesProductivity];
 assert(flags.every(value => ['true', 'false'].includes(value)));
 const migrationRequested = flags.includes('true');
 const mailEnvInstall = process.env.CRM_MAIL_ENV_INSTALL ?? 'false';
@@ -170,6 +176,9 @@ if (stageDuration === 'true')
 if (activityTextTemplates === 'true')
   assert(flags.filter(value => value === 'true').length === 1 && !envInstall,
     'CRM Sales activity text template migration must be an isolated full-manifest release');
+if (salesProductivity === 'true')
+  assert(flags.filter(value => value === 'true').length === 1 && !envInstall,
+    'CRM Sales productivity migration must be an isolated full-manifest release');
 if (riskControls === 'true')
   assert(flags.filter(value => value === 'true').length === 1 && mailEnvInstall === 'false' && chatEnvInstall === 'false' &&
     telegramEnvInstall === 'false' && !storageInstall && reliabilityEnvInstall === 'false' && uniformManifest(manifest),
@@ -644,6 +653,7 @@ function runMigrations() {
     ['crm-sales-stage-next-action-migration.mjs', stageNextAction, stageNextActionHash],
     ['crm-sales-stage-duration-migration.mjs', stageDuration, stageDurationHash],
     ['crm-sales-activity-text-templates-migration.mjs', activityTextTemplates, activityTextTemplatesHash],
+    ['crm-sales-productivity-migration.mjs', salesProductivity, salesProductivityHash],
     ['risk-controls-migration.mjs', riskControls, riskControlsHash]];
   for (const [name, enabled, hash] of hooks) if (enabled === 'true')
     execute(`Reviewed ${name}`, process.execPath, [`${stagedRoot}/scripts/${name}`, sha, hash], { cwd: root });
