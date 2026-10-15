@@ -106,6 +106,19 @@ jobs:
         run: node --test scripts/nginx-s3-dns.integration.test.mjs
       - name: Execute generated CRM reliability ACL on PostgreSQL 18
         run: node --test scripts/crm-reliability-acl-postgres18.test.mjs
+      - name: Check out exact application migration inventory
+        uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_monorepo
+          ref: ef37faa9785b67b4e91effeaea01af4971015ca3
+          path: app-source
+          persist-credentials: false
+      - name: Execute exact CRM productivity ACL on PostgreSQL 18
+        env:
+          AEROCRM_MONOREPO_PATH: ${{ github.workspace }}/app-source
+        run: |
+          test "$(git -C app-source rev-parse HEAD)" = ef37faa9785b67b4e91effeaea01af4971015ca3
+          node --test scripts/crm-sales-productivity-acl-postgres18.test.mjs
       - name: Verify Compose preserves unaffected containers
         env:
           REQUIRE_DOCKER_COMPOSE_TEST: 'true'

@@ -10,7 +10,8 @@ import { parseEnv } from 'node:util';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, uniformManifest, compositionDiff,
   imageVariables, stateKey, assertRuntime, validatePending, assertEffectiveConfig, nonReliabilityHooksDisabled,
   reviewedStoragePendingAmendment,
-  reviewedReliabilityPendingAmendment, reviewedReliabilityPostDdlAmendment } from './backend-release-state.mjs';
+  reviewedReliabilityPendingAmendment, reviewedReliabilityPostDdlAmendment,
+  reviewedSalesProductivityPendingAmendment, validateSalesRecoveryJournal } from './backend-release-state.mjs';
 
 import { runReleaseTransaction } from './backend-release-transaction.mjs';
 import { storageCopyOriginInfra, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
@@ -21,7 +22,7 @@ import { assertScopedS3Principals } from './backend-s3-principals.mjs';
 import { prepareRiskControlsWriters } from './risk-controls-capabilities.mjs';
 import { stageReliabilityEnvironment, validateReliabilityBundle } from './backend-reliability-env.mjs';
 import { reliabilityRecoveryHash, postDdlRecoveryHash, amendReliabilityPending,
-  validateReliabilityAmendedPending, amendPostDdlReliabilityPending,
+  amendPendingWithEvidence, validateReliabilityAmendedPending, amendPostDdlReliabilityPending,
   validatePostDdlAmendedPending } from './backend-reliability-recovery.mjs';
 import { stageChatEnvironment, validateChatBundle } from './backend-chat-env.mjs';
 import { stageTelegramBusinessEnvironment } from './backend-telegram-business-env.mjs';
@@ -211,6 +212,26 @@ function execute(label, command, commandArgs, options = {}) {
 function digest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function readMarker(name) { return fs.existsSync(`${releases}/${name}`) ? fs.readFileSync(`${releases}/${name}`, 'utf8').trim() : ''; }
 function writeJson(file, value) { atomic(file, `${JSON.stringify(value, null, 2)}\n`); }
+const salesRecoveryHash = 'e302204ad0034a78662bc13c218f462c9f5767dccab27147646de7d742347676';
+const salesRecoveryFiles = {
+  archive: `${releases}/backend-release.pending.${salesRecoveryHash}.original.json`,
+  receipt: `${releases}/backend-sales-productivity-recovery.${salesRecoveryHash}.json`
+};
+function salesRecoveryReceiptBytes(original, amendedTarget) {
+  return Buffer.from(`${JSON.stringify({ schemaVersion: 1, originalPendingHash: salesRecoveryHash,
+    oldInfraSha: original.target.infraSha, newInfraSha: amendedTarget.infraSha,
+    appSha: sha, ciRunId: original.target.manifest.ciRunId,
+    previousStateKey: stateKey(original.previous), targetStateKey: stateKey(amendedTarget),
+    envHash: amendedTarget.envHash, migrationEnvHash: salesProductivityHash }, null, 2)}\n`);
+}
+function validateSalesRecovery(amendedPending, amendedTarget) {
+  const originalBytes = privateBytes(salesRecoveryFiles.archive);
+  assert.equal(digest(originalBytes), salesRecoveryHash, 'Sales recovery original journal hash differs');
+  const original = JSON.parse(originalBytes.toString('utf8'));
+  validateSalesRecoveryJournal(original, amendedPending, amendedTarget);
+  assert(privateBytes(salesRecoveryFiles.receipt).equals(salesRecoveryReceiptBytes(original, amendedTarget)),
+    'Sales recovery receipt differs');
+}
 function envHash(directory) {
   return execute('Environment hash', 'bash', ['-c',
     'cd "$1"; find . -maxdepth 1 -type f -name "*.env" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1', '_', directory]);
@@ -687,7 +708,8 @@ function bootstrap() {
 }
 
 inspectImages(manifest);
-const canonical = fs.existsSync(stateFile) ? validateState(JSON.parse(fs.readFileSync(stateFile, 'utf8'))) : null;
+const originalCanonicalBytes = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
+const canonical = originalCanonicalBytes ? validateState(JSON.parse(originalCanonicalBytes.toString('utf8'))) : null;
 const originalPendingBytes = fs.existsSync(pendingFile) ? privateBytes(pendingFile) : null;
 let pending = originalPendingBytes ? JSON.parse(originalPendingBytes.toString('utf8')) : null;
 if (pending) {
@@ -754,7 +776,45 @@ if (envInstall) {
 }
 rolesForPlan(expectedEffectivePlan(target), true, true);
 if (pending && stateKey(pending.target) !== stateKey(target)) {
-  if (reliabilityEnvInstall === 'true') {
+  if (salesProductivity === 'true') {
+    const originalHash = digest(originalPendingBytes);
+    const isolatedHook = flags.filter(value => value === 'true').length === 1 && !envInstall &&
+      [mailEnvInstall, chatEnvInstall, telegramEnvInstall, reliabilityEnvInstall].every(value => value === 'false') &&
+      !storageInstall;
+    assert.equal(originalHash, salesRecoveryHash, 'Unreviewed Sales productivity pending journal');
+    verifyRuntime(previous); readiness(previous);
+    const liveEnvHash = envHash(`${root}/env/backend`);
+    const liveComposeHash = composeHash(`${root}/compose`);
+    const markersVerified = previous.closure.enabled === true &&
+      readMarker('backend.sha') === previous.manifest.releaseSha &&
+      readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
+      readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
+      readMarker('backend-rollback-blocked.pending') === sha;
+    const validateLive = () => {
+      assert(originalCanonicalBytes && fs.readFileSync(stateFile).equals(originalCanonicalBytes),
+        'Sales recovery canonical bytes changed');
+      assert.equal(envHash(`${root}/env/backend`), liveEnvHash, 'Sales recovery env changed');
+      assert.equal(composeHash(`${root}/compose`), liveComposeHash, 'Sales recovery compose changed');
+      assert(readMarker('backend.sha') === previous.manifest.releaseSha &&
+        readMarker('workspace-closure-enabled.sha') === previous.manifest.releaseSha &&
+        readMarker('workspace-closure-compatible.sha') === previous.closure.schemaAnchorSha &&
+        readMarker('backend-rollback-blocked.pending') === sha,
+      'Sales recovery markers changed');
+    };
+    const partialPreflight = () => execute('Reviewed CRM productivity partial recovery preflight', process.execPath,
+      [`${stagedRoot}/scripts/crm-sales-productivity-migration.mjs`,
+        '--read-only-partial-recovery-preflight', sha, salesProductivityHash], { cwd: root });
+    partialPreflight();
+    const amended = reviewedSalesProductivityPendingAmendment({ pending, originalPendingHash: originalHash,
+      canonical, target, isolatedHook, runtimeVerified: true, readinessVerified: true,
+      schemaVerified: true, liveEnvHash, liveComposeHash, markersVerified,
+      migrationEnvHash: salesProductivityHash });
+    pending = amendPendingWithEvidence({ releases, pendingFile, stateFile, originalPendingBytes,
+      pending, amended, target, evidenceFiles: salesRecoveryFiles,
+      receiptBuilder: salesRecoveryReceiptBytes,
+      validateLive: () => { verifyRuntime(previous); readiness(previous); partialPreflight(); validateLive(); }
+    }, salesRecoveryHash);
+  } else if (reliabilityEnvInstall === 'true') {
     const originalHash = digest(originalPendingBytes);
     verifyRuntime(previous); readiness(previous);
     const liveEnvHash = envHash(`${root}/env/backend`);
@@ -859,6 +919,10 @@ if (pending && stateKey(pending.target) !== stateKey(target)) {
   }
   }
 }
+if (pending && salesProductivity === 'true' &&
+    pending.target.manifest.releaseSha === 'ef37faa9785b67b4e91effeaea01af4971015ca3' &&
+    pending.target.infraSha !== 'de4b41f697b6a5fa53774b8ad08a1668c56f30d8')
+  validateSalesRecovery(pending, target);
 if (pending && reliabilityEnvInstall === 'true' && reliabilityPhase === 'prepare' &&
     sha === 'c948a4446496a6d1b83c58f6add04b9f6725a789' &&
     pending.target.infraSha !== 'c0751a293f18a282df282ea79810665d879b017e') {

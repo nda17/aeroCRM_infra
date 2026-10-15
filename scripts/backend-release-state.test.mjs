@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { apps, roles, rolesForPlan, portsForPlan, validateManifest, validateState, validatePending,
   compositionDiff, uniformManifest, imageVariables, stateKey, assertRuntime, assertEffectiveConfig,
   reviewedStoragePendingAmendment, reviewedReliabilityPendingAmendment,
-  reviewedReliabilityPostDdlAmendment, nonReliabilityHooksDisabled }
+  reviewedReliabilityPostDdlAmendment, reviewedSalesProductivityPendingAmendment,
+  validateSalesRecoveryJournal, nonReliabilityHooksDisabled }
   from './backend-release-state.mjs';
 import { auditedMessengerAttempt, isAuditedMessengerAttempt, auditedMessengerAttemptSql,
   validateCommittedStorageRecovery, makeCommittedRecoveryReceipt, validateCommittedRecoveryReceipt,
@@ -113,6 +114,21 @@ function postDdlReliabilityRecoveryFixture() {
     runtimeVerified: true, readinessVerified: true, markersVerified: true,
     ledgersComplete: true, schemaComplete: true, accessAclExact: true,
     customersLegacyAclExact: true, parentEvidenceVerified: true };
+  return { pending, target, args };
+}
+
+function salesProductivityRecoveryFixture() {
+  const previous = { ...state(sha('a'), '101'), envHash: hash('f') };
+  const pendingTarget = { ...state('ef37faa9785b67b4e91effeaea01af4971015ca3', '38814882709'),
+    infraSha: 'de4b41f697b6a5fa53774b8ad08a1668c56f30d8',
+    envHash: previous.envHash, composeHash: previous.composeHash };
+  const pending = { schemaVersion: 1, target: pendingTarget, previous, phase: 'switching' };
+  const target = { ...pendingTarget, infraSha: sha('9') };
+  const args = { pending, originalPendingHash: 'e302204ad0034a78662bc13c218f462c9f5767dccab27147646de7d742347676',
+    canonical: structuredClone(previous), target, isolatedHook: true, runtimeVerified: true,
+    readinessVerified: true, schemaVerified: true, liveEnvHash: previous.envHash,
+    liveComposeHash: previous.composeHash, markersVerified: true,
+    migrationEnvHash: 'ff3e4c649d2936ad96d7cb052e055a7ad9f814dafc816678735d4d9a3b17f546' };
   return { pending, target, args };
 }
 
@@ -260,6 +276,54 @@ test('reviewed storage recovery rejects marker, migration/DDL, applied target, a
     mutate(args);
     assert.throws(() => reviewedStoragePendingAmendment(args));
   }
+});
+
+test('reviewed Sales productivity recovery permits only the pinned infra provenance amendment', () => {
+  const fixture = salesProductivityRecoveryFixture();
+  const amended = reviewedSalesProductivityPendingAmendment(fixture.args);
+  assert.deepEqual(amended, { ...fixture.pending, target: fixture.target });
+  assert.equal(amended.target.infraSha, sha('9'));
+  assert.deepEqual(amended.target.manifest, fixture.pending.target.manifest);
+  assert.equal(amended.target.envHash, fixture.pending.target.envHash);
+  assert.equal(amended.target.composeHash, fixture.pending.target.composeHash);
+  assert.deepEqual(amended.target.closure, fixture.pending.target.closure);
+
+  const invalid = [
+    args => { args.originalPendingHash = hash('8'); },
+    args => { args.pending = { ...args.pending, target: { ...args.pending.target, infraSha: sha('8') } }; },
+    args => { args.pending = { ...args.pending, target: { ...args.pending.target,
+      manifest: { ...args.pending.target.manifest, ciRunId: '38814882710' } } }; },
+    args => { args.target = { ...args.target, manifest: manifest({ release: sha('8'), run: '404' }) }; },
+    args => { args.target = { ...args.target, envHash: hash('8') }; },
+    args => { args.target = { ...args.target, composeHash: hash('8') }; },
+    args => { args.target = { ...args.target, closure: { enabled: false, schemaAnchorSha: null } }; },
+    args => { args.canonical = structuredClone(args.target); },
+    args => { args.isolatedHook = false; },
+    args => { args.runtimeVerified = false; },
+    args => { args.readinessVerified = false; },
+    args => { args.schemaVerified = false; },
+    args => { args.markersVerified = false; },
+    args => { args.liveEnvHash = hash('8'); },
+    args => { args.liveComposeHash = hash('8'); },
+    args => { args.migrationEnvHash = hash('8'); }
+  ];
+  for (const mutate of invalid) {
+    const args = structuredClone(fixture.args);
+    mutate(args);
+    assert.throws(() => reviewedSalesProductivityPendingAmendment(args));
+  }
+});
+
+test('Sales recovery retry accepts archived original after amended canonical state committed', () => {
+  const fixture = salesProductivityRecoveryFixture();
+  const amended = reviewedSalesProductivityPendingAmendment(fixture.args);
+  const committedCanonical = amended.target;
+
+  assert.equal(validatePending(amended, committedCanonical), amended);
+  assert.equal(validateSalesRecoveryJournal(fixture.pending, amended, committedCanonical), fixture.pending);
+  assert.throws(() => validatePending(fixture.pending, committedCanonical), /disagrees/);
+  assert.throws(() => validateSalesRecoveryJournal(fixture.pending, fixture.pending, committedCanonical),
+    /differs from archived original/);
 });
 
 test('reviewed reliability recovery permits only the pinned infra provenance correction', () => {

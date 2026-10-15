@@ -173,6 +173,36 @@ export function reviewedReliabilityPostDdlAmendment({ pending, originalPendingHa
   assert.equal(customersLegacyAclExact, true); assert.equal(parentEvidenceVerified, true);
   return { ...pending, target };
 }
+// One exact post-DDL Sales productivity incident. The migration journal is
+// durable; only corrected infra provenance may differ on a forward retry.
+export function reviewedSalesProductivityPendingAmendment({ pending, originalPendingHash, canonical, target,
+  isolatedHook, runtimeVerified, readinessVerified, schemaVerified, liveEnvHash, liveComposeHash,
+  markersVerified, migrationEnvHash }) {
+  validatePending(pending, canonical); validateState(target);
+  assert.equal(originalPendingHash, 'e302204ad0034a78662bc13c218f462c9f5767dccab27147646de7d742347676',
+    'Sales productivity recovery requires exact failed journal');
+  assert.equal(pending.target.infraSha, 'de4b41f697b6a5fa53774b8ad08a1668c56f30d8',
+    'Sales productivity recovery requires exact failed infra');
+  assert.equal(pending.target.manifest.releaseSha, 'ef37faa9785b67b4e91effeaea01af4971015ca3');
+  assert.equal(pending.target.manifest.ciRunId, '38814882709');
+  assert.notEqual(target.infraSha, pending.target.infraSha);
+  assert(isDeepStrictEqual(target, { ...pending.target, infraSha: target.infraSha }),
+    'Sales productivity recovery may change only infra provenance');
+  assert(isDeepStrictEqual(canonical, pending.previous), 'Sales productivity recovery requires unchanged canonical state');
+  assert.equal(isolatedHook, true); assert.equal(runtimeVerified, true); assert.equal(readinessVerified, true);
+  assert.equal(schemaVerified, true); assert.equal(markersVerified, true);
+  assert.equal(liveEnvHash, pending.previous.envHash); assert.equal(liveEnvHash, target.envHash);
+  assert.equal(liveComposeHash, pending.previous.composeHash); assert.equal(liveComposeHash, target.composeHash);
+  assert.equal(migrationEnvHash, 'ff3e4c649d2936ad96d7cb052e055a7ad9f814dafc816678735d4d9a3b17f546');
+  return { ...pending, target };
+}
+export function validateSalesRecoveryJournal(original, amendedPending, amendedTarget) {
+  validatePending(original);
+  validateState(amendedTarget);
+  assert(isDeepStrictEqual(amendedPending, { ...original, target: amendedTarget }),
+    'Sales recovery amended journal differs from archived original');
+  return original;
+}
 export function compositionDiff(previous, target) {
   validateManifest(target); if (previous) validateManifest(previous);
   return apps.filter(app => !previous || previous.services[app].imageId !== target.services[app].imageId ||
