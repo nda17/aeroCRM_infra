@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { assertAndroidApkProxy } from './android-apk-proxy-contract.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -55,8 +56,7 @@ const sourceUrl = new URL(endpoint);
 if (forcePathStyle) sourceUrl.pathname = `/${Bucket}/${Key}`;
 else { sourceUrl.hostname = `${Bucket}.${sourceUrl.hostname}`; sourceUrl.pathname = `/${Key}`; }
 const downloadUrl = 'https://aerocrm.space/downloads/aeroCRM.apk';
-assert(fs.readFileSync(path.join(root, 'aeroCRM_infra/nginx/frontends.conf'), 'utf8')
-  .includes(`proxy_pass ${sourceUrl.href};`), 'APK proxy must target the same immutable S3 version');
+assertAndroidApkProxy(fs.readFileSync(path.join(root, 'aeroCRM_infra/nginx/frontends.conf'), 'utf8'), sourceUrl.href);
 const client = new S3Client({ endpoint: endpoint.href, region: input('REGION'), forcePathStyle,
   credentials: { accessKeyId: input('ACCESS_KEY_ID'), secretAccessKey: input('SECRET_ACCESS_KEY') }, maxAttempts: 2 });
 try {

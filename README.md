@@ -420,14 +420,32 @@ different bytes. Signing keys and their encrypted backup stay outside Git and S3
 
 ## Frontend edge recovery
 
-The application `frontend-edge-recovery.yml` workflow restores the existing frontend
-Nginx service through reviewed CI/CD. It requires green exact-SHA application and
-infrastructure CI, the currently deployed frontend SHA, the approved frontend env
-hash, and the installed root helper hash. Recovery preserves application images,
+The application `frontend-edge-recovery.yml` workflow accepts `recover` (default)
+or `configure`. Both operations require green production CI for the exact workflow,
+currently deployed application, and infrastructure SHAs, plus the approved frontend
+env hash and installed root helper hash. Recovery preserves application images,
 container identities, configuration, certificates and release markers. The helper
 starts an inactive/failed Nginx service; an active service is left running. Strict
 internal health and verified TLS/SNI checks must return the expected application
 and revision for all three frontends, followed by public HTTPS checks in CI.
+
+`configure` is the one reviewed transition from the installed vhost SHA-256
+`9c150bf83575156e605798e9e805f4f80f1ca3b3314a1fa4766bdaa0970b80bb`
+to the DNS-isolated vhost SHA-256
+`4d1b6152e68f3997e8ad54f90542cdd8af1a816804ecb54a54df7181d902d35d`.
+The root helper serializes it with the existing frontend release lock, verifies the
+old configuration and runtime state, and rolls back a failed Nginx activation.
+If the old static upstream cannot pass validation during a DNS outage, rollback
+preserves the running workers and the pending journal. Repeat the same exact
+configuration request to finish recovery; do not clear the journal or bypass the
+release gate.
+The infrastructure CI exercises a real Nginx 1.18 cold start with S3 NXDOMAIN and
+DNS timeout, then verifies request-time recovery and the fixed APK proxy contract.
+After configuration, the workflow checks all three public frontend revisions and
+the public APK GET bytes/size/SHA-256, HEAD, Range with If-Range, POST 405, and
+query 400. Ordinary frontend releases call the helper's `ready` gate before copying
+any frontend configuration to the host, so an unfinished edge transaction cannot
+be overwritten.
 
 Bootstrap uses the existing verified SSH host keys and a temporary
 `FRONTEND_EDGE_BOOTSTRAP_PASSWORD` GitHub secret for the fixed `root` account.
@@ -442,10 +460,9 @@ The sudoers policy does not change. A retry accepts only the same approved helpe
 bytes and repeats the live recovery proofs.
 
 Ordinary frontend releases verify loopback HTTPS before committing their marker
-and verify all public HTTPS revisions before CI reports success. Recovery does
-not remove the startup dependency on DNS resolution of the fixed APK upstream
-`s3.twcstorage.ru`; isolating that dependency and testing cold startup belongs to
-the pending DNS resilience work in the workspace backlog.
+and verify all public HTTPS revisions before CI reports success. The APK route
+resolves `s3.twcstorage.ru` at request time; an unavailable S3 DNS resolver can
+affect APK downloads without preventing the three frontend sites from starting.
 
 ## Reliability and retention release
 

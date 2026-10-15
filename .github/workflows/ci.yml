@@ -22,6 +22,8 @@ jobs:
           bash -n scripts/aerocrm-nginx-release.sh
           node --check scripts/frontend-edge-recovery.mjs
           node --test scripts/frontend-edge-recovery.test.mjs
+          python3 -c "from pathlib import Path; compile(Path('scripts/frontend-edge-configure.py').read_text(), 'scripts/frontend-edge-configure.py', 'exec')"
+          node --test scripts/frontend-edge-configure.test.mjs
           node --check scripts/backend-release.mjs
           node --check scripts/backend-release-state.mjs
           node --check scripts/backend-release-transaction.mjs
@@ -91,6 +93,10 @@ jobs:
           test "$(docker version --format '{{.Server.Version}}')" = '29.8.1'
           compose_version=$(docker compose version --short)
           test "${compose_version#v}" = '5.5.1'
+      - name: Prove Nginx 1.18 starts without S3 DNS and recovers at request time
+        env:
+          AEROCRM_REQUIRE_DOCKER: '1'
+        run: node --test scripts/nginx-s3-dns.integration.test.mjs
       - name: Execute generated CRM reliability ACL on PostgreSQL 18
         run: node --test scripts/crm-reliability-acl-postgres18.test.mjs
       - name: Verify Compose preserves unaffected containers

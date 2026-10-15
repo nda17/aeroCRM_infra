@@ -6,13 +6,15 @@ set -euo pipefail
 action=${1:-}
 sha=${2:-}
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 64
-if [[ "$action" == recover ]]; then
+if [[ "$action" == configure ]]; then
+  [[ $# -eq 4 && "$3" =~ ^[a-f0-9]{64}$ && "$4" =~ ^[a-f0-9]{64}$ ]] || exit 64
+elif [[ "$action" == recover ]]; then
   [[ $# -eq 3 && "$3" =~ ^[a-f0-9]{64}$ ]] || exit 64
 else
   [[ $# -eq 2 ]] || exit 64
 fi
 [[ "$action" == check || "$action" == apply || "$action" == rollback || "$action" == commit ||
-  "$action" == recover || "$action" == verify ]] || exit 64
+  "$action" == recover || "$action" == verify || "$action" == configure || "$action" == ready ]] || exit 64
 [[ $(id -u) -eq 0 && $(cat /etc/aerocrm-host-role) == frontend ]] || exit 1
 
 vhost=/etc/nginx/sites-available/aerocrm
@@ -23,7 +25,23 @@ current_file=$state_dir/current.sha
 pending_file=$state_dir/pending.sha
 backup_file=$state_dir/previous.conf
 baseline_sha=4e1b95ea60417e4ac3a7252fa62d1c9ed56472b48678df684540e617ac2f84a5
-candidate_sha=9c150bf83575156e605798e9e805f4f80f1ca3b3314a1fa4766bdaa0970b80bb
+candidate_sha=4d1b6152e68f3997e8ad54f90542cdd8af1a816804ecb54a54df7181d902d35d
+
+# Configure uses its root-owned durable journal, independently of ordinary release.
+configure_pending=$state_dir/configure.pending.json
+if [[ "$action" == configure ]]; then
+  controller=$state_dir/configure-$candidate_sha/controller.py
+  [[ -d "$state_dir" && ! -L "$state_dir" && $(stat -c '%u:%g:%a' "$state_dir") == 0:0:700 &&
+    -d "${controller%/*}" && ! -L "${controller%/*}" && $(stat -c '%u:%g:%a' "${controller%/*}") == 0:0:700 &&
+    -f "$controller" && ! -L "$controller" && $(stat -c '%u:%g:%a' "$controller") == 0:0:600 &&
+    $(sha256sum "$controller" | cut -d' ' -f1) == '989693e7413b857d3cd5d5ef3f4ae68d5824cf224f7387aa4a1fffbe3dd2764c' ]] || exit 1
+  exec python3 "$controller" configure "$sha" "$3" "$4"
+fi
+[[ ! -e "$configure_pending" && ! -L "$configure_pending" ]] || { echo 'Config-only Nginx transaction pending' >&2; exit 1; }
+if [[ "$action" == ready ]]; then
+  [[ ! -e "$pending_file" && ! -L "$pending_file" && ! -e "$backup_file" && ! -L "$backup_file" ]] || exit 1
+  exit 0
+fi
 
 [[ -f "$vhost" && ! -L "$vhost" && -L "$enabled" ]] || exit 1
 [[ $(readlink -f "$enabled") == "$vhost" ]] || exit 1

@@ -11,7 +11,7 @@ import { remoteRecoveryScript, sshArguments } from './frontend-edge-recovery.mjs
 const repo = path.dirname(fileURLToPath(import.meta.url));
 const project = path.dirname(repo);
 const sha = 'a'.repeat(40);
-const candidateHash = '9c150bf83575156e605798e9e805f4f80f1ca3b3314a1fa4766bdaa0970b80bb';
+const candidateHash = '4d1b6152e68f3997e8ad54f90542cdd8af1a816804ecb54a54df7181d902d35d';
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 function executable(file, source) {
@@ -239,9 +239,11 @@ test('a failed active reload makes apply fail and restores the prior config even
 });
 
 test('refuses pending release state, live drift, env drift, and malformed or mismatched health JSON', t => {
-  for (const [name, setup, env] of [
+  for (const [name, setup, env, args] of [
     ['pending marker', f => fs.writeFileSync(path.join(f.state, 'pending.sha'), `${sha}\n`), {}],
     ['backup file', f => fs.writeFileSync(path.join(f.state, 'previous.conf'), 'pending'), {}],
+    ['configure journal blocks ready', f => fs.writeFileSync(path.join(f.state, 'configure.pending.json'), '{}'), {}, ['ready', sha]],
+    ['configure journal blocks ordinary apply', f => fs.writeFileSync(path.join(f.state, 'configure.pending.json'), '{}'), {}, ['apply', sha]],
     ['live config drift', f => fs.appendFileSync(f.vhost, '# drift\n'), {}],
     ['staged config drift', f => fs.appendFileSync(f.staged, '# drift\n'), {}],
     ['env hash drift', f => fs.appendFileSync(path.join(f.envDir, 'crm.env'), 'EXTRA=1\n'), {}],
@@ -256,7 +258,7 @@ test('refuses pending release state, live drift, env drift, and malformed or mis
   ]) {
     const f = fixture(t);
     setup(f);
-    const result = f.run(undefined, env);
+    const result = f.run(args, env);
     assert.notEqual(result.status, 0, `${name} unexpectedly passed`);
     assert.equal(readLog(f.log).some(line => /systemctl (start|reload|restart)/.test(line)), false,
       `${name} reached a service mutation`);
